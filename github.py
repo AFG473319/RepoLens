@@ -64,7 +64,7 @@ def getLanguages(owner: str, repo: str) -> dict:
     """
     data = getRepo(owner, repo, "/languages")
     if not isinstance(data, dict):
-        raise TypeError(f"Expected list response from API, got {type(data).__name__}")
+        raise TypeError(f"Expected dict response from API, got {type(data).__name__}")
 
     return data
 
