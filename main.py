@@ -7,7 +7,8 @@ import report
 
 def main() -> None:
     """Main entry point for the application."""
-    pass
+    menu.print_banner()
+    menu.show_menu(["Analyze a repository", "Exit"])
 
 
 if __name__ == "__main__":
