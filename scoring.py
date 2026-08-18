@@ -82,8 +82,9 @@ def calculate_activity_score(commits: dict) -> float:
 
     
     
-def calculate_community_score(contributors: list[dict], issues: list[dict]) -> float:
-    """Calculate community engagement score.
+def calculate_community_score(contributors: dict, issues: dict) -> float:
+    """
+    Calculate community engagement score.
 
     Args:
         contributors: List of contributor dictionaries.
@@ -92,7 +93,16 @@ def calculate_community_score(contributors: list[dict], issues: list[dict]) -> f
     Returns:
         Community score between 0.0 and 100.0.
     """
-    pass
+    contributors_count = contributors["total_contributors"]
+    if contributors_count > 100:
+        contributors_count_score = 100
+    else:
+        contributors_count_score = contributors_count / 100
+
+    issues_score = (issues["open_issues"] * 2) + (issues["closed_issues"] * 5)
+    if issues_score > 100:
+        issues_score = 100
+    return ((contributors_count_score + issues_score) / 2)
 
 def calculate_maintainability_score(repo_data: dict) -> float:
     """Calculate maintainability score based on repository metrics.
