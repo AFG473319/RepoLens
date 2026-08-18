@@ -45,3 +45,13 @@ RepoLens/
 3. `analyzer.py` extracts metrics from the raw API data
 4. `scoring.py` calculates numeric scores and letter grades
 5. `report.py` formats the results and saves them to a file
+
+## Testing
+
+Run the test suite with Python's built-in unittest:
+
+```bash
+python -m unittest discover -s tests -p "test_*.py" -v
+```
+
+Tests cover every function across all modules using mocked API responses and user input.
