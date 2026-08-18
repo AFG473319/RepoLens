@@ -5,26 +5,87 @@ import scoring
 import report
 
 
+def analyze_repository(owner: str, repo: str) -> tuple:
+    """Fetch and analyze a repository.
+    
+    Args:
+        owner: GitHub username or organization.
+        repo: Repository name.
+    
+    Returns:
+        A tuple of (analysis_dict, scores_dict)
+    """
+    repo_data = github.getRepo(owner, repo)
+    commits_data = github.getCommits(owner, repo)
+    contributors_data = github.getContributors(owner, repo)
+    languages_data = github.getLanguages(owner, repo)
+    issues_data = github.getIssues(owner, repo)
+    
+    analysis = {
+        "repo": analyzer.analyze_repo(repo_data),
+        "commits": analyzer.analyze_commits(commits_data),
+        "contributors": analyzer.analyze_contributors(contributors_data),
+        "languages": analyzer.analyze_languages(languages_data),
+        "issues": analyzer.analyze_issues(issues_data)
+    }
+    
+    health_score = scoring.calculate_health_score(analysis)
+    
+    scores = {
+        "health_score": health_score,
+        "activity_score": scoring.calculate_activity_score(analysis.get("commits", {})),
+        "community_score": scoring.calculate_community_score(
+            analysis.get("contributors", {}),
+            analysis.get("issues", {})
+        ),
+        "maintainability_score": scoring.calculate_maintainability_score(
+            analysis.get("repo", {})
+        ),
+        "grade": scoring.grade_score(health_score)
+    }
+    
+    return analysis, scores
+
+
 def main() -> None:
     """Main entry point for the application."""
-    choices = ["Analyze a repository", "Exit"]
-    menu.print_banner()
     while True:
-        menu.show_menu(["Analyze a repository", "Exit"])
+        menu.print_banner()
+        choices = ["Analyze a repository", "Exit"]
+        menu.show_menu(choices)
         user_choice = menu.get_user_choice(choices)
+        
         if user_choice == "Exit":
             if menu.confirm_exit():
+                print("Goodbye!")
                 return
+            continue
+        
         if user_choice == "Analyze a repository":
-            owner, repo = menu.prompt_repo_input()
-            report_format = menu.prompt_report_format()
-            analysis = {
-            "repo": analyzer.analyze_repo(github.getRepo(owner, repo)),
-            "commits": analyzer.analyze_commits(github.getCommits(owner, repo)),
-            "contributors": analyzer.analyze_contributors(github.getContributors(owner, repo)),
-            "languages": analyzer.analyze_languages(github.getLanguages(owner, repo)),
-            "issues": analyzer.analyze_issues(github.getIssues(owner, repo))
-            }
+            try:
+                owner, repo = menu.prompt_repo_input()
+                report_format = menu.prompt_report_format()
+                
+                print("\nFetching data from GitHub...")
+                analysis, scores = analyze_repository(owner, repo)
+                
+                print("\n")
+                report.print_summary(scores)
+                
+                if report_format.lower() == "json":
+                    report_content = report.generate_json_report(analysis, scores)
+                    filename = f"{owner}_{repo}_report.json"
+                else:
+                    report_content = report.generate_text_report(analysis, scores)
+                    filename = f"{owner}_{repo}_report.txt"
+                
+                report.save_report(report_content, filename)
+                print(f"\nReport saved to {filename}")
+                
+            except Exception as e:
+                print(f"\nError: {e}")
+            
+            input("\nPress Enter to continue...")
 
 
 if __name__ == "__main__":
