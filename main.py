@@ -20,6 +20,7 @@ def analyze_repository(owner: str, repo: str) -> tuple:
     api_key = None
     if dotenv.load_dotenv():
         api_key = os.getenv("GITHUB_API_KEY")
+    
     repo_data = github.get_repo(owner, repo, api_key=api_key)
     commits_data = github.get_commits(owner, repo, api_key)
     contributors_data = github.get_contributors(owner, repo, api_key)

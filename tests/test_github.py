@@ -7,30 +7,33 @@ class TestGetRepo(unittest.TestCase):
     @patch("github.requests.get")
     def test_get_repo_returns_json(self, mock_get):
         mock_response = MagicMock()
+        mock_response.status_code = 200
         mock_response.json.return_value = {"name": "test-repo"}
         mock_get.return_value = mock_response
 
         result = github.get_repo("owner", "repo")
         self.assertEqual(result, {"name": "test-repo"})
         mock_get.assert_called_once_with(
-            "https://api.github.com/repos/owner/repo"
+            "https://api.github.com/repos/owner/repo", headers={}, timeout=10
         )
 
     @patch("github.requests.get")
     def test_get_repo_with_endpoint(self, mock_get):
         mock_response = MagicMock()
+        mock_response.status_code = 200
         mock_response.json.return_value = []
         mock_get.return_value = mock_response
 
         result = github.get_repo("owner", "repo", endpoint="/commits")
         self.assertEqual(result, [])
         mock_get.assert_called_once_with(
-            "https://api.github.com/repos/owner/repo/commits"
+            "https://api.github.com/repos/owner/repo/commits", headers={}, timeout=10
         )
 
     @patch("github.requests.get")
     def test_get_repo_raises_on_bad_status(self, mock_get):
         mock_response = MagicMock()
+        mock_response.status_code = 404
         mock_response.raise_for_status.side_effect = Exception("404")
         mock_get.return_value = mock_response
 

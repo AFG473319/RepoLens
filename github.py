@@ -1,6 +1,9 @@
+import time
+
 import requests
 
-def get_repo(owner: str, repo: str, endpoint: str = "", api_key = None) -> dict:
+
+def get_repo(owner: str, repo: str, endpoint: str = "", api_key=None) -> dict:
     """Fetch repository metadata from GitHub API.
 
     Args:
@@ -11,14 +14,23 @@ def get_repo(owner: str, repo: str, endpoint: str = "", api_key = None) -> dict:
         Repository data as a dictionary.
     """
     url = f"https://api.github.com/repos/{owner}/{repo}{endpoint}"
-    if api_key:
-        headers = {"Authorization": f"token {api_key}"}
-        response = requests.get(url, headers=headers)
-    else:
-        response = requests.get(url)
+    headers = {"Authorization": f"token {api_key}"} if api_key else {}
+
+    response = requests.get(url, headers=headers, timeout=10)
+
+    if response.status_code == 429:
+        retry_after = int(response.headers.get("Retry-After", 1))
+        time.sleep(retry_after)
+        response = requests.get(url, headers=headers, timeout=10)
+    elif response.status_code >= 500:
+        retries = 0
+        while response.status_code >= 500 and retries < 3:
+            time.sleep(2 ** retries)
+            retries += 1
+            response = requests.get(url, headers=headers, timeout=10)
+
     response.raise_for_status()
-    data = response.json()
-    return data
+    return response.json()
 
 def get_commits(owner: str, repo: str, api_key = None) -> list[dict]:
     """Fetch commit history for a repository.
