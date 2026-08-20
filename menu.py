@@ -60,8 +60,9 @@ def prompt_report_format() -> str:
     Returns:
         Selected format as a string (e.g. 'text', 'json').
     """
-    report_format = input("Enter the report format: ")
-    return report_format
+    formats = ["Text", "JSON"]
+    show_menu(formats)
+    return get_user_choice(formats).lower()
 
 
 def confirm_exit() -> bool:

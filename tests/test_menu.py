@@ -108,12 +108,22 @@ class TestPromptRepoInput(unittest.TestCase):
 
 
 class TestPromptReportFormat(unittest.TestCase):
-    @patch("builtins.input", return_value="json")
-    def test_prompt_report_format_returns_string(self, mock_input):
+    @patch("builtins.input", return_value="2")
+    @patch("menu.show_menu")
+    def test_prompt_report_format_returns_string(self, mock_show_menu, mock_input):
         result = prompt_report_format()
 
         self.assertEqual(result, "json")
+        mock_show_menu.assert_called_once_with(["Text", "JSON"])
         mock_input.assert_called_once()
+
+    @patch("builtins.input", return_value="1")
+    @patch("menu.show_menu")
+    def test_prompt_report_format_text(self, mock_show_menu, mock_input):
+        result = prompt_report_format()
+
+        self.assertEqual(result, "text")
+        mock_show_menu.assert_called_once_with(["Text", "JSON"])
 
 
 class TestConfirmExit(unittest.TestCase):
