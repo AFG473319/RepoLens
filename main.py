@@ -17,9 +17,8 @@ def analyze_repository(owner: str, repo: str) -> tuple[dict, dict]:
     Returns:
         A tuple of (analysis_dict, scores_dict)
     """
-    api_key = None
-    if dotenv.load_dotenv():
-        api_key = os.getenv("GITHUB_API_KEY")
+    dotenv.load_dotenv()
+    api_key = os.getenv("GITHUB_API_KEY")
     
     repo_data = github.get_repo(owner, repo, api_key=api_key)
     commits_data = github.get_commits(owner, repo, api_key)
