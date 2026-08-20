@@ -96,7 +96,7 @@ class TestSaveReport(unittest.TestCase):
 
         save_report(report_content, filename)
 
-        open.assert_called_once_with(filename, "w")
+        open.assert_called_once_with(filename, "w", encoding="utf-8")
 
     @patch("builtins.open", unittest.mock.mock_open())
     def test_save_report_writes_content(self):

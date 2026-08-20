@@ -80,8 +80,8 @@ class TestAnalyzeCommits(unittest.TestCase):
 class TestAnalyzeContributors(unittest.TestCase):
     def test_analyze_contributors_finds_top(self):
         contributors = [
-            {"login": "Alice", "contributions": 10},
             {"login": "Bob", "contributions": 25},
+            {"login": "Alice", "contributions": 10},
             {"login": "Charlie", "contributions": 5},
         ]
 

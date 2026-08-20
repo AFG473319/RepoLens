@@ -11,49 +11,49 @@ def generate_text_report(analysis: dict, scores: dict) -> str:
     Returns:
         Formatted text report as a string.
     """
-    report = ""
-    report += "RepoLens Analysis Report\n"
-    report += "=" * 40 + "\n\n"
+    report_content = ""
+    report_content += "RepoLens Analysis Report\n"
+    report_content += "=" * 40 + "\n\n"
 
     repo = analysis.get("repo", {})
-    report += "Repository Info\n"
-    report += "  Name: " + str(repo.get("name")) + "\n"
-    report += "  Description: " + str(repo.get("description", "No description")) + "\n"
-    report += "  Stars: " + str(repo.get("stars")) + "\n"
-    report += "  Forks: " + str(repo.get("forks")) + "\n"
-    report += "  Language: " + str(repo.get("language")) + "\n\n"
+    report_content += "Repository Info\n"
+    report_content += "  Name: " + str(repo.get("name")) + "\n"
+    report_content += "  Description: " + str(repo.get("description", "No description")) + "\n"
+    report_content += "  Stars: " + str(repo.get("stars")) + "\n"
+    report_content += "  Forks: " + str(repo.get("forks")) + "\n"
+    report_content += "  Language: " + str(repo.get("language")) + "\n\n"
 
     commits = analysis.get("commits", {})
-    report += "Commits\n"
-    report += "  Total commits: " + str(commits.get("total_commits")) + "\n"
-    report += "  Unique contributors: " + str(commits.get("unique_contributors")) + "\n"
-    report += "  Latest commit date: " + str(commits.get("latest_commit_date")) + "\n\n"
+    report_content += "Commits\n"
+    report_content += "  Total commits: " + str(commits.get("total_commits")) + "\n"
+    report_content += "  Unique contributors: " + str(commits.get("unique_contributors")) + "\n"
+    report_content += "  Latest commit date: " + str(commits.get("latest_commit_date")) + "\n\n"
 
     contributors = analysis.get("contributors", {})
-    report += "Contributors\n"
-    report += "  Total contributors: " + str(contributors.get("total_contributors")) + "\n"
-    report += "  Top contributor: " + str(contributors.get("top_contributor")) + "\n"
-    report += "  Most contributions: " + str(contributors.get("most_contributions")) + "\n\n"
+    report_content += "Contributors\n"
+    report_content += "  Total contributors: " + str(contributors.get("total_contributors")) + "\n"
+    report_content += "  Top contributor: " + str(contributors.get("top_contributor")) + "\n"
+    report_content += "  Most contributions: " + str(contributors.get("most_contributions")) + "\n\n"
 
     languages = analysis.get("languages", {})
-    report += "Languages\n"
-    report += "  Primary language: " + str(languages.get("primary_language")) + "\n"
-    report += "  Language count: " + str(languages.get("language_count")) + "\n\n"
+    report_content += "Languages\n"
+    report_content += "  Primary language: " + str(languages.get("primary_language")) + "\n"
+    report_content += "  Language count: " + str(languages.get("language_count")) + "\n\n"
 
     issues = analysis.get("issues", {})
-    report += "Issues\n"
-    report += "  Total issues: " + str(issues.get("total_issues")) + "\n"
-    report += "  Open issues: " + str(issues.get("open_issues")) + "\n"
-    report += "  Closed issues: " + str(issues.get("closed_issues")) + "\n\n"
+    report_content += "Issues\n"
+    report_content += "  Total issues: " + str(issues.get("total_issues")) + "\n"
+    report_content += "  Open issues: " + str(issues.get("open_issues")) + "\n"
+    report_content += "  Closed issues: " + str(issues.get("closed_issues")) + "\n\n"
 
-    report += "Scores\n"
-    report += "  Health score: " + str(scores.get("health_score")) + "\n"
-    report += "  Activity score: " + str(scores.get("activity_score")) + "\n"
-    report += "  Community score: " + str(scores.get("community_score")) + "\n"
-    report += "  Maintainability score: " + str(scores.get("maintainability_score")) + "\n"
-    report += "  Grade: " + str(scores.get("grade")) + "\n"
+    report_content += "Scores\n"
+    report_content += "  Health score: " + str(scores.get("health_score")) + "\n"
+    report_content += "  Activity score: " + str(scores.get("activity_score")) + "\n"
+    report_content += "  Community score: " + str(scores.get("community_score")) + "\n"
+    report_content += "  Maintainability score: " + str(scores.get("maintainability_score")) + "\n"
+    report_content += "  Grade: " + str(scores.get("grade")) + "\n"
 
-    return report
+    return report_content
 
 
 def generate_json_report(analysis: dict, scores: dict) -> str:
@@ -82,9 +82,8 @@ def save_report(report: str, filename: str) -> None:
         report: Report content as a string.
         filename: Output file path.
     """
-    file_handle = open(filename, "w")
-    file_handle.write(report)
-    file_handle.close()
+    with open(filename, "w", encoding="utf-8") as file_handle:
+        file_handle.write(report)
 
 
 def print_summary(scores: dict) -> None:

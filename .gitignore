@@ -27,3 +27,6 @@ coverage.xml
 *~
 .DS_Store
 Thumbs.db
+improvements.md
+.env
+*.env

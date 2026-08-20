@@ -1,3 +1,5 @@
+import os
+import dotenv
 import menu
 import github
 import analyzer
@@ -15,11 +17,14 @@ def analyze_repository(owner: str, repo: str) -> tuple:
     Returns:
         A tuple of (analysis_dict, scores_dict)
     """
-    repo_data = github.getRepo(owner, repo)
-    commits_data = github.getCommits(owner, repo)
-    contributors_data = github.getContributors(owner, repo)
-    languages_data = github.getLanguages(owner, repo)
-    issues_data = github.getIssues(owner, repo)
+    api_key = None
+    if dotenv.load_dotenv():
+        api_key = os.getenv("GITHUB_API_KEY")
+    repo_data = github.get_repo(owner, repo, api_key=api_key)
+    commits_data = github.get_commits(owner, repo, api_key)
+    contributors_data = github.get_contributors(owner, repo, api_key)
+    languages_data = github.get_languages(owner, repo, api_key)
+    issues_data = github.get_issues(owner, repo, api_key)
     
     analysis = {
         "repo": analyzer.analyze_repo(repo_data),
@@ -78,9 +83,13 @@ def main() -> None:
                 else:
                     report_content = report.generate_text_report(analysis, scores)
                     filename = f"{owner}_{repo}_report.txt"
-                
-                report.save_report(report_content, filename)
-                print(f"\nReport saved to {filename}")
+                try:
+                    report.save_report(report_content, filename)
+                    print(f"\nReport saved to {filename}")
+                except PermissionError as e:
+                    print(f"Error: I don't Have Access To {filename}")
+                except IOError as e:
+                    print(f"Error: {e}")
                 
             except Exception as e:
                 print(f"\nError: {e}")

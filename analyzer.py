@@ -64,11 +64,6 @@ def analyze_contributors(contributors: list[dict]) -> dict:
     total_contributors = len(contributors)
     top_contributor = contributors[0]
     most_contributions = top_contributor["contributions"]
-    for contributor in contributors:
-        contributions = contributor["contributions"]
-        if contributions > most_contributions:
-            top_contributor = contributor
-            most_contributions = contributions
     return {
         "total_contributors": total_contributors,
         "top_contributor": top_contributor["login"],

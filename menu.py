@@ -61,8 +61,8 @@ def prompt_report_format() -> str:
     Returns:
         Selected format as a string (e.g. 'text', 'json').
     """
-    format = input("Enter the report format: ")
-    return format
+    report_format = input("Enter the report format: ")
+    return report_format
 
 def confirm_exit() -> bool:
     """Ask the user to confirm program exit.
