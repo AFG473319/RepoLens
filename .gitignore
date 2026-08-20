@@ -30,3 +30,5 @@ Thumbs.db
 improvements.md
 .env
 *.env
+*_report.txt
+*_report.json

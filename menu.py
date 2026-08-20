@@ -1,23 +1,14 @@
+from rich.console import Console
+from rich_pyfiglet import RichFiglet
+
 def print_banner() -> None:
-    colors = [
-        "\033[91m",
-        "\033[93m",
-        "\033[92m",
-        "\033[96m",
-        "\033[94m",
-        "\033[95m",
-    ]
-    reset = "\033[0m"
-    banner = [
-        " ______     ______     ______   ______     __         ______     __   __     ______    ",
-        "/\\\  == \\   /\\\  ___\   /\\\  == \\ /\\\  __ \\   /\\\ \\       /\\\  ___\\   /\\\ \"-.\ \\   /\\\  ___\\   ",
-        "\\\ \\  __<   \\\ \\  __\   \\\ \\  _-/ \\\ \\ /\\\ \\  \\\ \\ \\____  \\\ \\  __\   \\\ \\\ \-.  \\  \\\ \\___  \\  ",
-        " \\\ \\_\\ \\_\\  \\\ \\_____\\  \\\ \\_\\    \\\ \\_____\\  \\\ \\_____\\  \\\ \\_____\\  \\\ \\_\\\"\_\\  \\\/\_____\\ ",
-        "  \\\/_/ /_/   \\\/_____/   \\\/_/     \\\/_____/   \\\/_____/   \\\/_____/   \\\/_/ \\/_/   \\\/_____/ ",
-    ]
-    for i, line in enumerate(banner):
-        color = colors[i % len(colors)]
-        print(f"{color}{line}{reset}")
+    console = Console()
+    banner = RichFiglet(
+        "AFG473319",
+        "larry3d",
+        colors=["#191970", "#8A2BE2", "#FFBF00"]
+    )
+    console.print(banner)
 
 
 def show_menu(choices: list) -> None:
