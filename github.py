@@ -110,4 +110,4 @@ def get_issues(owner: str, repo: str, api_key: str | None = None) -> list[dict]:
     Returns:
         List of issue dictionaries.
     """
-    return _fetch(owner, repo, "/issues", list, api_key)
+    return _fetch(owner, repo, "/issues?state=all", list, api_key)

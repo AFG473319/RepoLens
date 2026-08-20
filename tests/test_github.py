@@ -115,7 +115,7 @@ class TestGetIssues(unittest.TestCase):
         self.assertIsInstance(result, list)
         self.assertEqual(len(result), 2)
         mock_get_repo.assert_called_once_with(
-            "owner", "repo", "/issues", None
+            "owner", "repo", "/issues?state=all", None
         )
 
     @patch("github.get_repo")
