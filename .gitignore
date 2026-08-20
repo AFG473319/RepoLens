@@ -32,3 +32,4 @@ improvements.md
 *.env
 *_report.txt
 *_report.json
+.venv/
