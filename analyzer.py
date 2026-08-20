@@ -34,12 +34,18 @@ def analyze_commits(commits: list[dict]) -> dict:
         Dictionary containing commit analysis results.
     """
     total_commits = len(commits)
-    unique_authors = []
+    unique_authors: set[str] = set()
+    latest_commit_date = None
+
     for commit in commits:
-        author = commit["commit"]["author"]["name"]
-        if author not in unique_authors:
-            unique_authors.append(author)
-    latest_commit_date = commits[0]["commit"]["author"]["date"] if commits else None
+        author = commit.get("commit", {}).get("author", {}).get("name")
+        if author:
+            unique_authors.add(author)
+
+        date = commit.get("commit", {}).get("author", {}).get("date")
+        if date and (latest_commit_date is None or date > latest_commit_date):
+            latest_commit_date = date
+
     return {
         "total_commits": total_commits,
         "unique_contributors": len(unique_authors),
@@ -62,12 +68,14 @@ def analyze_contributors(contributors: list[dict]) -> dict:
             "most_contributions": 0
         }
     total_contributors = len(contributors)
-    top_contributor = contributors[0]
-    most_contributions = top_contributor["contributions"]
+    top_contributor = max(
+        contributors,
+        key=lambda c: c.get("contributions", 0)
+    )
     return {
         "total_contributors": total_contributors,
-        "top_contributor": top_contributor["login"],
-        "most_contributions": most_contributions
+        "top_contributor": top_contributor.get("login"),
+        "most_contributions": top_contributor.get("contributions", 0)
     }
 
 def analyze_languages(languages: dict) -> dict:

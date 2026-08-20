@@ -8,15 +8,15 @@ class TestAnalyzeRepository(unittest.TestCase):
     @patch("main.analyzer")
     @patch("main.scoring")
     def test_analyze_repository_pipeline(self, mock_scoring, mock_analyzer, mock_github):
-        mock_github.getRepo.return_value = {"name": "test-repo"}
-        mock_github.getCommits.return_value = [
+        mock_github.get_repo.return_value = {"name": "test-repo"}
+        mock_github.get_commits.return_value = [
             {"commit": {"author": {"name": "Alice", "date": "2024-06-15"}}}
         ]
-        mock_github.getContributors.return_value = [
+        mock_github.get_contributors.return_value = [
             {"login": "Alice", "contributions": 10}
         ]
-        mock_github.getLanguages.return_value = {"Python": 1000}
-        mock_github.getIssues.return_value = [
+        mock_github.get_languages.return_value = {"Python": 1000}
+        mock_github.get_issues.return_value = [
             {"state": "open"}, {"state": "closed"}
         ]
 

@@ -74,16 +74,16 @@ def generate_json_report(analysis: dict, scores: dict) -> str:
     return json.dumps(data, indent=4)
 
 
-def save_report(report: str, filename: str) -> None:
+def save_report(report_content: str, filename: str) -> None:
     """
     Save a report to a file.
 
     Args:
-        report: Report content as a string.
+        report_content: Report content as a string.
         filename: Output file path.
     """
     with open(filename, "w", encoding="utf-8") as file_handle:
-        file_handle.write(report)
+        file_handle.write(report_content)
 
 
 def print_summary(scores: dict) -> None:

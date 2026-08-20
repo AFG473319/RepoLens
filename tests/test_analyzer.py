@@ -56,7 +56,7 @@ class TestAnalyzeCommits(unittest.TestCase):
 
         self.assertEqual(result["total_commits"], 3)
         self.assertEqual(result["unique_contributors"], 2)
-        self.assertEqual(result["latest_commit_date"], "2024-01-01")
+        self.assertEqual(result["latest_commit_date"], "2024-01-03")
 
     def test_analyze_commits_with_empty_list(self):
         result = analyze_commits([])
