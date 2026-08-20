@@ -7,13 +7,13 @@ import scoring
 import report
 
 
-def analyze_repository(owner: str, repo: str) -> tuple:
+def analyze_repository(owner: str, repo: str) -> tuple[dict, dict]:
     """Fetch and analyze a repository.
-    
+
     Args:
         owner: GitHub username or organization.
         repo: Repository name.
-    
+
     Returns:
         A tuple of (analysis_dict, scores_dict)
     """
