@@ -49,8 +49,8 @@ def prompt_repo_input() -> tuple[str, str]:
     Returns:
         A tuple of (owner, repo) strings.
     """
-    owner = input("Enter the repository owner: ")
-    repo = input("Enter the repository name: ")
+    owner = input("Enter the repository owner: ").strip()
+    repo = input("Enter the repository name: ").strip()
     return (owner, repo)
 
 

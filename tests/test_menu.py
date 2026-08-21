@@ -106,6 +106,12 @@ class TestPromptRepoInput(unittest.TestCase):
         self.assertEqual(result, ("torvalds", "linux"))
         self.assertEqual(mock_input.call_count, 2)
 
+    @patch("builtins.input", side_effect=["  torvalds  ", "  linux  "])
+    def test_prompt_repo_input_strips_whitespace(self, mock_input):
+        result = prompt_repo_input()
+
+        self.assertEqual(result, ("torvalds", "linux"))
+
 
 class TestPromptReportFormat(unittest.TestCase):
     @patch("builtins.input", return_value="2")

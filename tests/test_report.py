@@ -54,7 +54,9 @@ class TestGenerateTextReport(unittest.TestCase):
         result = generate_text_report(analysis, scores)
 
         self.assertIsInstance(result, str)
-        self.assertIn("None", result)
+        self.assertIn("Unknown", result)
+        self.assertIn("No description", result)
+        self.assertNotIn("None", result)
 
 
 class TestGenerateJsonReport(unittest.TestCase):
