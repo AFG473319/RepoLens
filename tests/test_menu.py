@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import patch
+from rich_pyfiglet import RichFiglet
 from menu import (
     print_banner,
     show_menu,
@@ -11,21 +12,18 @@ from menu import (
 
 
 class TestPrintBanner(unittest.TestCase):
-    @patch("builtins.print")
-    def test_print_banner_outputs_lines(self, mock_print):
+    @patch("menu.Console")
+    def test_print_banner_outputs_lines(self, mock_console_cls):
         print_banner()
 
-        self.assertTrue(mock_print.called)
-        call_count = mock_print.call_count
-        self.assertEqual(call_count, 5)
+        mock_console_cls.return_value.print.assert_called_once()
 
-    @patch("builtins.print")
-    def test_print_banner_contains_ansi_codes(self, mock_print):
+    @patch("menu.Console")
+    def test_print_banner_renders_figlet_banner(self, mock_console_cls):
         print_banner()
 
-        first_call = mock_print.call_args[0][0]
-        self.assertIn("\033[", first_call)
-        self.assertIn("\033[0m", first_call)
+        banner = mock_console_cls.return_value.print.call_args[0][0]
+        self.assertIsInstance(banner, RichFiglet)
 
 
 class TestShowMenu(unittest.TestCase):

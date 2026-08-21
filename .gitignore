@@ -33,3 +33,5 @@ improvements.md
 *_report.txt
 *_report.json
 .venv/
+.freebuff
+implementation_plan.md
