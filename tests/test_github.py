@@ -237,6 +237,43 @@ class TestGetRetries(unittest.TestCase):
         mock_sleep.assert_not_called()
 
 
+class TestRetryAfterSeconds(unittest.TestCase):
+    def test_missing_header_returns_default(self):
+        self.assertEqual(github._retry_after_seconds({}), 1)
+
+    def test_empty_header_returns_default(self):
+        self.assertEqual(github._retry_after_seconds({"Retry-After": ""}), 1)
+
+    def test_valid_seconds_parsed(self):
+        self.assertEqual(github._retry_after_seconds({"Retry-After": "5"}), 5)
+
+    def test_zero_clamped_to_default(self):
+        self.assertEqual(github._retry_after_seconds({"Retry-After": "0"}), 1)
+
+    def test_negative_clamped_to_default(self):
+        self.assertEqual(github._retry_after_seconds({"Retry-After": "-5"}), 1)
+
+    def test_garbage_returns_default(self):
+        self.assertEqual(github._retry_after_seconds({"Retry-After": "garbage"}), 1)
+
+    def test_http_date_falls_back_to_default(self):
+        self.assertEqual(
+            github._retry_after_seconds(
+                {"Retry-After": "Wed, 21 Oct 2015 07:28:00 GMT"}
+            ),
+            1,
+        )
+
+    def test_custom_default_respected(self):
+        self.assertEqual(github._retry_after_seconds({}, default=3), 3)
+        self.assertEqual(
+            github._retry_after_seconds({"Retry-After": "0"}, default=3), 3
+        )
+        self.assertEqual(
+            github._retry_after_seconds({"Retry-After": "10"}, default=3), 10
+        )
+
+
 class TestValidateType(unittest.TestCase):
     def test_passes_data_through_when_type_matches(self):
         data = [{"n": 1}]

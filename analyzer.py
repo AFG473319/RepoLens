@@ -38,11 +38,14 @@ def analyze_commits(commits: list[dict]) -> dict:
     latest_commit_date = None
 
     for commit in commits:
-        author = commit.get("commit", {}).get("author", {}).get("name")
+        commit_info = commit.get("commit") or {}
+        author_info = commit_info.get("author") or {}
+
+        author = author_info.get("name")
         if author:
             unique_authors.add(author)
 
-        date = commit.get("commit", {}).get("author", {}).get("date")
+        date = author_info.get("date")
         if date and (latest_commit_date is None or date > latest_commit_date):
             latest_commit_date = date
 

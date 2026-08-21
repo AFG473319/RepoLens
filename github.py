@@ -8,6 +8,23 @@ PER_PAGE = 100
 MAX_PAGES = 10
 
 
+def _retry_after_seconds(headers, default: int = 1) -> int:
+    """Parse a Retry-After header into seconds to wait.
+
+    GitHub sends Retry-After as a delay in seconds. Returns at least
+    ``default`` seconds, falling back to ``default`` when the header
+    is missing, empty, or unparseable.
+    """
+    value = headers.get("Retry-After")
+    if not value:
+        return default
+
+    try:
+        return max(default, int(value))
+    except ValueError:
+        return default
+
+
 def _fetch(
     url: str,
     api_key: str | None = None,
@@ -43,7 +60,7 @@ def _fetch(
             raise
 
         if response.status_code == 429:
-            retry_after = int(response.headers.get("Retry-After", 1))
+            retry_after = _retry_after_seconds(response.headers)
             if attempt < max_retries:
                 time.sleep(retry_after)
                 continue
