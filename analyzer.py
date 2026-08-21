@@ -113,10 +113,14 @@ def analyze_issues(issues: list[dict]) -> dict:
     Returns:
         Dictionary containing issue analysis results.
     """
-    total_issues = len(issues)
+    # Filter out pull requests — the /issues endpoint returns both,
+    # but PRs have a "pull_request" key that issues lack.
+    real_issues = [i for i in issues if "pull_request" not in i]
+
+    total_issues = len(real_issues)
     open_count = 0
     closed_count = 0
-    for issue in issues:
+    for issue in real_issues:
         if issue.get("state") == "open":
             open_count += 1
         elif issue.get("state") == "closed":

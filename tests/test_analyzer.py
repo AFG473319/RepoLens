@@ -189,6 +189,20 @@ class TestAnalyzeIssues(unittest.TestCase):
         self.assertEqual(result["open_issues"], 0)
         self.assertEqual(result["closed_issues"], 1)
 
+    def test_analyze_issues_filters_pull_requests(self):
+        issues = [
+            {"number": 1, "state": "open"},
+            {"number": 2, "state": "closed"},
+            {"number": 3, "state": "open", "pull_request": {"url": "..."}},
+            {"number": 4, "state": "closed", "pull_request": {"url": "..."}},
+        ]
+
+        result = analyze_issues(issues)
+
+        self.assertEqual(result["total_issues"], 2)
+        self.assertEqual(result["open_issues"], 1)
+        self.assertEqual(result["closed_issues"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
