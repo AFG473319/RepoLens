@@ -47,6 +47,32 @@ class TestCalculateActivityScore(unittest.TestCase):
         result = calculate_activity_score({})
         self.assertAlmostEqual(result, 0.0)
 
+    def test_precise_value_no_bonus(self):
+        result = calculate_activity_score({"total_commits": 9})
+        self.assertEqual(result, 20.0)
+
+    def test_precise_value_with_bonus(self):
+        result = calculate_activity_score({
+            "total_commits": 9,
+            "latest_commit_date": "2024-06-15",
+        })
+        self.assertEqual(result, 30.0)
+
+    def test_rounds_to_two_decimals(self):
+        result = calculate_activity_score({"total_commits": 10})
+        self.assertEqual(result, 20.83)
+
+    def test_capped_at_100_without_bonus(self):
+        result = calculate_activity_score({"total_commits": 99999})
+        self.assertEqual(result, 100.0)
+
+    def test_bonus_beyond_cap_still_100(self):
+        result = calculate_activity_score({
+            "total_commits": 99999,
+            "latest_commit_date": "2024-06-15",
+        })
+        self.assertEqual(result, 100.0)
+
 
 class TestCalculateCommunityScore(unittest.TestCase):
     def test_zero_contributors_and_issues(self):
@@ -80,6 +106,41 @@ class TestCalculateCommunityScore(unittest.TestCase):
     def test_missing_keys_defaults_to_zero(self):
         result = calculate_community_score({}, {})
         self.assertAlmostEqual(result, 0.0)
+
+    def test_issue_score_only(self):
+        result = calculate_community_score(
+            {"total_contributors": 0},
+            {"total_issues": 10, "closed_issues": 5},
+        )
+        self.assertAlmostEqual(result, 25.0)
+
+    def test_contributor_score_caps_at_50(self):
+        result = calculate_community_score(
+            {"total_contributors": 100},
+            {"total_issues": 0, "closed_issues": 0},
+        )
+        self.assertEqual(result, 50.0)
+
+    def test_precise_rounding(self):
+        result = calculate_community_score(
+            {"total_contributors": 3},
+            {"total_issues": 3, "closed_issues": 1},
+        )
+        self.assertEqual(result, 24.17)
+
+    def test_exact_cap_100(self):
+        result = calculate_community_score(
+            {"total_contributors": 100},
+            {"total_issues": 100, "closed_issues": 100},
+        )
+        self.assertEqual(result, 100.0)
+
+    def test_all_issues_closed_full_issue_score(self):
+        result = calculate_community_score(
+            {"total_contributors": 0},
+            {"total_issues": 5, "closed_issues": 5},
+        )
+        self.assertEqual(result, 50.0)
 
 
 class TestCalculateMaintainabilityScore(unittest.TestCase):
@@ -142,6 +203,60 @@ class TestCalculateMaintainabilityScore(unittest.TestCase):
         })
         self.assertLessEqual(result, 100.0)
 
+    def test_both_metadata_no_stars_or_forks(self):
+        result = calculate_maintainability_score({
+            "stars": 0,
+            "forks": 0,
+            "description": "A repo",
+            "language": "Python",
+        })
+        self.assertEqual(result, 30.0)
+
+    def test_precise_stars_only(self):
+        result = calculate_maintainability_score({
+            "stars": 9,
+            "forks": 0,
+            "description": None,
+            "language": None,
+        })
+        self.assertEqual(result, 10.0)
+
+    def test_whitespace_description_is_truthy(self):
+        result = calculate_maintainability_score({
+            "stars": 0,
+            "forks": 0,
+            "description": " ",
+            "language": None,
+        })
+        self.assertEqual(result, 15.0)
+
+    def test_stars_capped_at_40(self):
+        result = calculate_maintainability_score({
+            "stars": 100000,
+            "forks": 0,
+            "description": None,
+            "language": None,
+        })
+        self.assertEqual(result, 40.0)
+
+    def test_forks_capped_at_30(self):
+        result = calculate_maintainability_score({
+            "stars": 0,
+            "forks": 100000,
+            "description": None,
+            "language": None,
+        })
+        self.assertEqual(result, 30.0)
+
+    def test_full_score_exact_100(self):
+        result = calculate_maintainability_score({
+            "stars": 100000,
+            "forks": 100000,
+            "description": "A repo",
+            "language": "Python",
+        })
+        self.assertEqual(result, 100.0)
+
 
 class TestCalculateHealthScore(unittest.TestCase):
     def test_health_score_averages_subscores(self):
@@ -168,6 +283,18 @@ class TestCalculateHealthScore(unittest.TestCase):
         }
         result = calculate_health_score(analysis)
         self.assertIsInstance(result, float)
+
+    def test_exact_average_of_subscores(self):
+        analysis = {
+            "commits": {"total_commits": 99},
+            "contributors": {},
+            "issues": {},
+            "repo": {},
+        }
+
+        result = calculate_health_score(analysis)
+
+        self.assertEqual(result, 13.33)
 
 
 class TestGradeScore(unittest.TestCase):
@@ -207,6 +334,12 @@ class TestGradeScore(unittest.TestCase):
     def test_boundary_d(self):
         self.assertEqual(grade_score(59.99), "F")
         self.assertEqual(grade_score(60.0), "D")
+
+    def test_negative_score(self):
+        self.assertEqual(grade_score(-10), "F")
+
+    def test_above_100(self):
+        self.assertEqual(grade_score(150), "A")
 
 
 if __name__ == "__main__":

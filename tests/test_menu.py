@@ -56,6 +56,12 @@ class TestShowMenu(unittest.TestCase):
         self.assertIn("1. First", calls)
         self.assertIn("2. Second", calls)
 
+    @patch("builtins.print")
+    def test_show_menu_single_choice(self, mock_print):
+        show_menu(["Only"])
+
+        mock_print.assert_called_once_with("1. Only")
+
 
 class TestGetUserChoice(unittest.TestCase):
     @patch("builtins.input", side_effect=["2"])
@@ -94,6 +100,59 @@ class TestGetUserChoice(unittest.TestCase):
 
         self.assertEqual(result, "Only One")
 
+    @patch("builtins.input", side_effect=[" 2 "])
+    def test_get_user_choice_strips_surrounding_whitespace(self, mock_input):
+        choices = ["Analyze", "Exit"]
+
+        result = get_user_choice(choices)
+
+        self.assertEqual(result, "Exit")
+
+    @patch("builtins.input", side_effect=["0", "1"])
+    def test_get_user_choice_rejects_zero(self, mock_input):
+        choices = ["Analyze", "Exit"]
+
+        result = get_user_choice(choices)
+
+        self.assertEqual(result, "Analyze")
+        self.assertEqual(mock_input.call_count, 2)
+
+    @patch("builtins.input", side_effect=["-1", "1"])
+    def test_get_user_choice_rejects_negative(self, mock_input):
+        choices = ["Analyze", "Exit"]
+
+        result = get_user_choice(choices)
+
+        self.assertEqual(result, "Analyze")
+        self.assertEqual(mock_input.call_count, 2)
+
+    @patch("builtins.print")
+    @patch("builtins.input", side_effect=["", "1"])
+    def test_get_user_choice_rejects_empty_input(self, mock_input, mock_print):
+        choices = ["Analyze", "Exit"]
+
+        result = get_user_choice(choices)
+
+        self.assertEqual(result, "Analyze")
+        self.assertTrue(mock_print.called)
+
+    @patch("builtins.input", side_effect=["5", "2"])
+    def test_get_user_choice_rejects_out_of_range(self, mock_input):
+        choices = ["A", "B", "C"]
+
+        result = get_user_choice(choices)
+
+        self.assertEqual(result, "B")
+        self.assertEqual(mock_input.call_count, 2)
+
+    @patch("builtins.input", side_effect=["3"])
+    def test_get_user_choice_accepts_last_choice(self, mock_input):
+        choices = ["A", "B", "C"]
+
+        result = get_user_choice(choices)
+
+        self.assertEqual(result, "C")
+
 
 class TestPromptRepoInput(unittest.TestCase):
     @patch("builtins.input", side_effect=["torvalds", "linux"])
@@ -109,6 +168,12 @@ class TestPromptRepoInput(unittest.TestCase):
         result = prompt_repo_input()
 
         self.assertEqual(result, ("torvalds", "linux"))
+
+    @patch("builtins.input", side_effect=["", ""])
+    def test_prompt_repo_input_preserves_empty_strings(self, mock_input):
+        result = prompt_repo_input()
+
+        self.assertEqual(result, ("", ""))
 
 
 class TestPromptReportFormat(unittest.TestCase):
@@ -128,6 +193,17 @@ class TestPromptReportFormat(unittest.TestCase):
 
         self.assertEqual(result, "text")
         mock_show_menu.assert_called_once_with(["Text", "JSON"])
+
+    @patch("builtins.print")
+    @patch("builtins.input", side_effect=["3", "1"])
+    @patch("menu.show_menu")
+    def test_prompt_report_format_invalid_then_valid(
+        self, mock_show_menu, mock_input, mock_print
+    ):
+        result = prompt_report_format()
+
+        self.assertEqual(result, "text")
+        self.assertEqual(mock_input.call_count, 2)
 
 
 class TestConfirmExit(unittest.TestCase):
@@ -153,6 +229,51 @@ class TestConfirmExit(unittest.TestCase):
 
     @patch("builtins.input", return_value="anything")
     def test_confirm_exit_with_unexpected_input(self, mock_input):
+        result = confirm_exit()
+        self.assertFalse(result)
+
+    @patch("builtins.input", return_value="Y")
+    def test_confirm_exit_uppercase_y(self, mock_input):
+        result = confirm_exit()
+        self.assertTrue(result)
+
+    @patch("builtins.input", return_value="YES")
+    def test_confirm_exit_uppercase_yes(self, mock_input):
+        result = confirm_exit()
+        self.assertTrue(result)
+
+    @patch("builtins.input", return_value="Yes")
+    def test_confirm_exit_mixed_case_yes(self, mock_input):
+        result = confirm_exit()
+        self.assertTrue(result)
+
+    @patch("builtins.input", return_value="")
+    def test_confirm_exit_empty_input(self, mock_input):
+        result = confirm_exit()
+        self.assertFalse(result)
+
+    @patch("builtins.input", return_value=" y ")
+    def test_confirm_exit_strips_whitespace_y(self, mock_input):
+        result = confirm_exit()
+        self.assertTrue(result)
+
+    @patch("builtins.input", return_value="  yes  ")
+    def test_confirm_exit_strips_whitespace_yes(self, mock_input):
+        result = confirm_exit()
+        self.assertTrue(result)
+
+    @patch("builtins.input", return_value=" n ")
+    def test_confirm_exit_strips_whitespace_n(self, mock_input):
+        result = confirm_exit()
+        self.assertFalse(result)
+
+    @patch("builtins.input", return_value="  no  ")
+    def test_confirm_exit_strips_whitespace_no(self, mock_input):
+        result = confirm_exit()
+        self.assertFalse(result)
+
+    @patch("builtins.input", return_value="   ")
+    def test_confirm_exit_whitespace_only(self, mock_input):
         result = confirm_exit()
         self.assertFalse(result)
 

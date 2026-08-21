@@ -14,6 +14,15 @@ def _mock_response(data, next_url=None):
     return response
 
 
+def _status_response(status_code, data=None, headers=None):
+    """Build a fake requests.Response with an arbitrary status code."""
+    response = MagicMock()
+    response.status_code = status_code
+    response.json.return_value = data if data is not None else {}
+    response.headers = headers if headers is not None else {}
+    return response
+
+
 class TestGetRepo(unittest.TestCase):
     @patch("github.requests.get")
     def test_get_repo_returns_json(self, mock_get):
@@ -50,6 +59,19 @@ class TestGetRepo(unittest.TestCase):
 
         with self.assertRaises(Exception):
             github.get_repo("owner", "repo")
+
+    @patch("github.requests.get")
+    def test_get_repo_passes_api_key_header(self, mock_get):
+        mock_get.return_value = _mock_response({"name": "test-repo"})
+
+        result = github.get_repo("owner", "repo", api_key="secret")
+
+        self.assertEqual(result, {"name": "test-repo"})
+        mock_get.assert_called_once_with(
+            "https://api.github.com/repos/owner/repo",
+            headers={"Authorization": "token secret"},
+            timeout=10,
+        )
 
 
 class TestFetchTypeValidation(unittest.TestCase):
@@ -126,6 +148,94 @@ class TestGetRetries(unittest.TestCase):
         self.assertEqual(result, {"name": "test-repo"})
         self.assertEqual(mock_get.call_count, 2)
 
+    @patch("github.time.sleep")
+    @patch("github.requests.get")
+    def test_retries_on_500_then_succeeds(self, mock_get, mock_sleep):
+        mock_get.side_effect = [
+            _status_response(500),
+            _status_response(500),
+            _status_response(500),
+            _mock_response({"name": "test-repo"}),
+        ]
+
+        result = github.get_repo("owner", "repo")
+
+        self.assertEqual(result, {"name": "test-repo"})
+        self.assertEqual(mock_get.call_count, 4)
+        self.assertEqual([c[0][0] for c in mock_sleep.call_args_list], [1, 2, 4])
+
+    @patch("github.time.sleep")
+    @patch("github.requests.get")
+    def test_raises_http_error_after_500_retries_exhausted(self, mock_get, mock_sleep):
+        responses = []
+        for _ in range(4):
+            response = _status_response(500)
+            response.raise_for_status.side_effect = requests.exceptions.HTTPError("500")
+            responses.append(response)
+        mock_get.side_effect = responses
+
+        with self.assertRaises(requests.exceptions.HTTPError):
+            github.get_repo("owner", "repo")
+
+        self.assertEqual(mock_get.call_count, 4)
+
+    @patch("github.time.sleep")
+    @patch("github.requests.get")
+    def test_429_without_retry_after_defaults_to_one_second(self, mock_get, mock_sleep):
+        rate_limited = _mock_response({"message": "rate limited"})
+        rate_limited.status_code = 429
+        rate_limited.headers = {}
+        mock_get.side_effect = [rate_limited, _mock_response({"name": "test-repo"})]
+
+        result = github.get_repo("owner", "repo")
+
+        self.assertEqual(result, {"name": "test-repo"})
+        mock_sleep.assert_called_once_with(1)
+
+    @patch("github.time.sleep")
+    @patch("github.requests.get")
+    def test_raises_after_429_retries_exhausted(self, mock_get, mock_sleep):
+        responses = []
+        for _ in range(4):
+            response = _mock_response({"message": "rate limited"})
+            response.status_code = 429
+            response.headers = {"Retry-After": "1"}
+            response.raise_for_status.side_effect = requests.exceptions.HTTPError("429")
+            responses.append(response)
+        mock_get.side_effect = responses
+
+        with self.assertRaises(requests.exceptions.HTTPError):
+            github.get_repo("owner", "repo")
+
+        self.assertEqual(mock_get.call_count, 4)
+
+    @patch("github.time.sleep")
+    @patch("github.requests.get")
+    def test_connection_error_backoff_increments(self, mock_get, mock_sleep):
+        mock_get.side_effect = [
+            requests.exceptions.ConnectionError(),
+            requests.exceptions.ConnectionError(),
+            _mock_response({"name": "test-repo"}),
+        ]
+
+        result = github.get_repo("owner", "repo")
+
+        self.assertEqual(result, {"name": "test-repo"})
+        self.assertEqual([c[0][0] for c in mock_sleep.call_args_list], [1, 2])
+
+    @patch("github.time.sleep")
+    @patch("github.requests.get")
+    def test_no_retry_on_404(self, mock_get, mock_sleep):
+        response = _status_response(404)
+        response.raise_for_status.side_effect = requests.exceptions.HTTPError("404")
+        mock_get.return_value = response
+
+        with self.assertRaises(requests.exceptions.HTTPError):
+            github.get_repo("owner", "repo")
+
+        self.assertEqual(mock_get.call_count, 1)
+        mock_sleep.assert_not_called()
+
 
 class TestValidateType(unittest.TestCase):
     def test_passes_data_through_when_type_matches(self):
@@ -133,11 +243,22 @@ class TestValidateType(unittest.TestCase):
 
         self.assertIs(github._validate_type(data, list), data)
 
+    def test_passes_dict_through(self):
+        data = {"n": 1}
+
+        self.assertIs(github._validate_type(data, dict), data)
+
     def test_raises_type_error_on_mismatch(self):
         with self.assertRaises(TypeError) as ctx:
             github._validate_type([], dict)
 
         self.assertIn("Expected dict response from API, got list", str(ctx.exception))
+
+    def test_raises_type_error_message_for_dict_vs_list(self):
+        with self.assertRaises(TypeError) as ctx:
+            github._validate_type({}, list)
+
+        self.assertIn("Expected list response from API, got dict", str(ctx.exception))
 
 
 class TestPaginate(unittest.TestCase):
@@ -176,6 +297,14 @@ class TestPaginate(unittest.TestCase):
         mock_get.assert_called_once()
 
     @patch("github._fetch")
+    def test_empty_first_page(self, mock_get):
+        mock_get.return_value = _mock_response([])
+
+        result = github._paginate("owner", "repo", "/commits")
+
+        self.assertEqual(result, [])
+
+    @patch("github._fetch")
     def test_appends_to_existing_query_string(self, mock_get):
         mock_get.return_value = _mock_response([])
 
@@ -187,11 +316,24 @@ class TestPaginate(unittest.TestCase):
             expected_type=list,
         )
 
+    @patch("github._fetch")
+    def test_passes_api_key_through(self, mock_get):
+        mock_get.return_value = _mock_response([])
+
+        github._paginate("owner", "repo", "/commits", api_key="secret")
+
+        mock_get.assert_called_once_with(
+            "https://api.github.com/repos/owner/repo/commits?per_page=100",
+            api_key="secret",
+            expected_type=list,
+        )
+
     @patch("builtins.print")
     @patch("github._fetch")
     def test_stops_at_page_cap_and_warns(self, mock_get, mock_print):
         mock_get.return_value = _mock_response(
-            [{"n": 1}], next_url="https://api.github.com/repos/owner/repo/commits?per_page=100&page=2"
+            [{"n": 1}],
+            next_url="https://api.github.com/repos/owner/repo/commits?per_page=100&page=2",
         )
 
         result = github._paginate("owner", "repo", "/commits")
@@ -201,6 +343,32 @@ class TestPaginate(unittest.TestCase):
         mock_print.assert_called_once()
         self.assertIn("approximate", mock_print.call_args[0][0])
         self.assertEqual(mock_print.call_args[1].get("file"), sys.stderr)
+
+    @patch("builtins.print")
+    @patch("github._fetch")
+    def test_no_warning_when_all_pages_fetched(self, mock_get, mock_print):
+        mock_get.side_effect = [
+            _mock_response([{"n": 1}], next_url="https://example.com/page=2"),
+            _mock_response([{"n": 2}]),
+        ]
+
+        github._paginate("owner", "repo", "/commits")
+
+        mock_print.assert_not_called()
+
+    @patch("builtins.print")
+    @patch("github._fetch")
+    def test_exact_page_cap_no_warning(self, mock_get, mock_print):
+        responses = []
+        for i in range(github.MAX_PAGES):
+            next_url = "https://example.com/page=2" if i < github.MAX_PAGES - 1 else None
+            responses.append(_mock_response([{"n": i}], next_url=next_url))
+        mock_get.side_effect = responses
+
+        result = github._paginate("owner", "repo", "/commits")
+
+        self.assertEqual(len(result), github.MAX_PAGES)
+        mock_print.assert_not_called()
 
     @patch("github.requests.get")
     def test_raises_type_error_if_not_list(self, mock_get):
@@ -224,6 +392,16 @@ class TestGetCommits(unittest.TestCase):
         mock_paginate.assert_called_once_with("owner", "repo", "/commits", api_key=None)
 
     @patch("github._paginate")
+    def test_get_commits_passes_api_key(self, mock_paginate):
+        mock_paginate.return_value = []
+
+        github.get_commits("owner", "repo", api_key="secret")
+
+        mock_paginate.assert_called_once_with(
+            "owner", "repo", "/commits", api_key="secret"
+        )
+
+    @patch("github._paginate")
     def test_get_commits_raises_type_error_if_not_list(self, mock_paginate):
         mock_paginate.side_effect = TypeError("Expected list response from API, got dict")
 
@@ -243,6 +421,16 @@ class TestGetContributors(unittest.TestCase):
         self.assertEqual(result[0]["login"], "Alice")
         mock_paginate.assert_called_once_with(
             "owner", "repo", "/contributors", api_key=None
+        )
+
+    @patch("github._paginate")
+    def test_get_contributors_passes_api_key(self, mock_paginate):
+        mock_paginate.return_value = []
+
+        github.get_contributors("owner", "repo", api_key="secret")
+
+        mock_paginate.assert_called_once_with(
+            "owner", "repo", "/contributors", api_key="secret"
         )
 
     @patch("github._paginate")
@@ -269,6 +457,18 @@ class TestGetLanguages(unittest.TestCase):
             expected_type=dict,
         )
 
+    @patch("github._fetch")
+    def test_get_languages_passes_api_key(self, mock_fetch):
+        mock_fetch.return_value = _mock_response({"Python": 10})
+
+        github.get_languages("owner", "repo", api_key="secret")
+
+        mock_fetch.assert_called_once_with(
+            "https://api.github.com/repos/owner/repo/languages",
+            api_key="secret",
+            expected_type=dict,
+        )
+
     @patch("github.requests.get")
     def test_get_languages_raises_type_error_if_not_dict(self, mock_get):
         mock_get.return_value = _mock_response([])
@@ -290,6 +490,16 @@ class TestGetIssues(unittest.TestCase):
         self.assertEqual(len(result), 2)
         mock_paginate.assert_called_once_with(
             "owner", "repo", "/issues?state=all", api_key=None
+        )
+
+    @patch("github._paginate")
+    def test_get_issues_passes_api_key(self, mock_paginate):
+        mock_paginate.return_value = []
+
+        github.get_issues("owner", "repo", api_key="secret")
+
+        mock_paginate.assert_called_once_with(
+            "owner", "repo", "/issues?state=all", api_key="secret"
         )
 
     @patch("github._paginate")

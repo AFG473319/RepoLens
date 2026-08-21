@@ -3,6 +3,23 @@ from unittest.mock import patch, MagicMock
 import main
 
 
+ANALYSIS_DICT = {
+    "repo": {},
+    "commits": {},
+    "contributors": {},
+    "languages": {},
+    "issues": {},
+}
+
+SCORES_DICT = {
+    "health_score": 85.0,
+    "activity_score": 70.0,
+    "community_score": 60.0,
+    "maintainability_score": 90.0,
+    "grade": "B",
+}
+
+
 class TestAnalyzeRepository(unittest.TestCase):
     @patch("main.github")
     @patch("main.analyzer")
@@ -46,6 +63,113 @@ class TestAnalyzeRepository(unittest.TestCase):
         self.assertEqual(scores["maintainability_score"], 90.0)
         self.assertEqual(scores["grade"], "B")
 
+    @patch("main.dotenv.load_dotenv")
+    @patch("main.os.getenv")
+    @patch("main.github")
+    @patch("main.analyzer")
+    @patch("main.scoring")
+    def test_api_key_from_env_is_passed(
+        self, mock_scoring, mock_analyzer, mock_github, mock_getenv, mock_load_dotenv
+    ):
+        mock_getenv.return_value = "secret"
+        mock_github.get_repo.return_value = {}
+        mock_github.get_commits.return_value = []
+        mock_github.get_contributors.return_value = []
+        mock_github.get_languages.return_value = {}
+        mock_github.get_issues.return_value = []
+
+        mock_analyzer.analyze_repo.return_value = {}
+        mock_analyzer.analyze_commits.return_value = {}
+        mock_analyzer.analyze_contributors.return_value = {}
+        mock_analyzer.analyze_languages.return_value = {}
+        mock_analyzer.analyze_issues.return_value = {}
+
+        mock_scoring.calculate_health_score.return_value = 0.0
+        mock_scoring.calculate_activity_score.return_value = 0.0
+        mock_scoring.calculate_community_score.return_value = 0.0
+        mock_scoring.calculate_maintainability_score.return_value = 0.0
+        mock_scoring.grade_score.return_value = "F"
+
+        main.analyze_repository("owner", "repo")
+
+        mock_github.get_repo.assert_called_once_with("owner", "repo", api_key="secret")
+        mock_github.get_commits.assert_called_once_with("owner", "repo", "secret")
+        mock_github.get_contributors.assert_called_once_with("owner", "repo", "secret")
+        mock_github.get_languages.assert_called_once_with("owner", "repo", "secret")
+        mock_github.get_issues.assert_called_once_with("owner", "repo", "secret")
+
+    @patch("main.github")
+    @patch("main.analyzer")
+    @patch("main.scoring")
+    def test_analyzer_receives_raw_data(self, mock_scoring, mock_analyzer, mock_github):
+        repo_data = {"name": "test-repo"}
+        commits_data = [{"sha": "abc"}]
+        contributors_data = [{"login": "Alice"}]
+        languages_data = {"Python": 10}
+        issues_data = [{"state": "open"}]
+
+        mock_github.get_repo.return_value = repo_data
+        mock_github.get_commits.return_value = commits_data
+        mock_github.get_contributors.return_value = contributors_data
+        mock_github.get_languages.return_value = languages_data
+        mock_github.get_issues.return_value = issues_data
+
+        mock_analyzer.analyze_repo.return_value = {}
+        mock_analyzer.analyze_commits.return_value = {}
+        mock_analyzer.analyze_contributors.return_value = {}
+        mock_analyzer.analyze_languages.return_value = {}
+        mock_analyzer.analyze_issues.return_value = {}
+
+        mock_scoring.calculate_health_score.return_value = 0.0
+        mock_scoring.calculate_activity_score.return_value = 0.0
+        mock_scoring.calculate_community_score.return_value = 0.0
+        mock_scoring.calculate_maintainability_score.return_value = 0.0
+        mock_scoring.grade_score.return_value = "F"
+
+        main.analyze_repository("owner", "repo")
+
+        mock_analyzer.analyze_repo.assert_called_once_with(repo_data)
+        mock_analyzer.analyze_commits.assert_called_once_with(commits_data)
+        mock_analyzer.analyze_contributors.assert_called_once_with(contributors_data)
+        mock_analyzer.analyze_languages.assert_called_once_with(languages_data)
+        mock_analyzer.analyze_issues.assert_called_once_with(issues_data)
+
+    @patch("main.github")
+    @patch("main.analyzer")
+    @patch("main.scoring")
+    def test_scoring_receives_analysis_subdicts(self, mock_scoring, mock_analyzer, mock_github):
+        mock_github.get_repo.return_value = {}
+        mock_github.get_commits.return_value = []
+        mock_github.get_contributors.return_value = []
+        mock_github.get_languages.return_value = {}
+        mock_github.get_issues.return_value = []
+
+        mock_analyzer.analyze_repo.return_value = {"stars": 1}
+        mock_analyzer.analyze_commits.return_value = {"total_commits": 1}
+        mock_analyzer.analyze_contributors.return_value = {"total_contributors": 1}
+        mock_analyzer.analyze_languages.return_value = {"language_count": 1}
+        mock_analyzer.analyze_issues.return_value = {"total_issues": 1}
+
+        mock_scoring.calculate_health_score.return_value = 0.0
+        mock_scoring.calculate_activity_score.return_value = 0.0
+        mock_scoring.calculate_community_score.return_value = 0.0
+        mock_scoring.calculate_maintainability_score.return_value = 0.0
+        mock_scoring.grade_score.return_value = "F"
+
+        main.analyze_repository("owner", "repo")
+
+        mock_scoring.calculate_activity_score.assert_called_once_with({"total_commits": 1})
+        mock_scoring.calculate_community_score.assert_called_once_with(
+            {"total_contributors": 1}, {"total_issues": 1}
+        )
+        mock_scoring.calculate_maintainability_score.assert_called_once_with({"stars": 1})
+
+        health_arg = mock_scoring.calculate_health_score.call_args[0][0]
+        self.assertEqual(
+            set(health_arg.keys()),
+            {"repo", "commits", "contributors", "languages", "issues"},
+        )
+
 
 class TestMain(unittest.TestCase):
     @patch("main.menu")
@@ -59,22 +183,7 @@ class TestMain(unittest.TestCase):
         mock_menu.prompt_report_format.return_value = "text"
         mock_menu.confirm_exit.return_value = True
 
-        mock_analyze.return_value = (
-            {
-                "repo": {},
-                "commits": {},
-                "contributors": {},
-                "languages": {},
-                "issues": {},
-            },
-            {
-                "health_score": 85.0,
-                "activity_score": 70.0,
-                "community_score": 60.0,
-                "maintainability_score": 90.0,
-                "grade": "B",
-            },
-        )
+        mock_analyze.return_value = (ANALYSIS_DICT, SCORES_DICT)
 
         mock_report.print_summary.return_value = None
         mock_report.generate_text_report.return_value = "report text"
@@ -129,6 +238,87 @@ class TestMain(unittest.TestCase):
                 main.main()
 
         mock_analyze.assert_called_once_with("owner", "repo")
+
+    @patch("main.menu")
+    @patch("main.analyze_repository")
+    @patch("main.report")
+    def test_main_json_report_flow(self, mock_report, mock_analyze, mock_menu):
+        mock_menu.get_user_choice.side_effect = ["Analyze a repository", "Exit"]
+        mock_menu.prompt_repo_input.return_value = ("owner", "repo")
+        mock_menu.prompt_report_format.return_value = "json"
+        mock_menu.confirm_exit.return_value = True
+        mock_analyze.return_value = (ANALYSIS_DICT, SCORES_DICT)
+        mock_report.generate_json_report.return_value = '{"analysis": {}, "scores": {}}'
+
+        with patch("builtins.print"):
+            with patch("builtins.input", return_value=""):
+                main.main()
+
+        mock_report.generate_json_report.assert_called_once_with(ANALYSIS_DICT, SCORES_DICT)
+        mock_report.generate_text_report.assert_not_called()
+        mock_report.save_report.assert_called_once_with(
+            '{"analysis": {}, "scores": {}}', "owner_repo_report.json"
+        )
+
+    @patch("main.menu")
+    @patch("main.analyze_repository")
+    @patch("main.report")
+    def test_main_text_report_filename(self, mock_report, mock_analyze, mock_menu):
+        mock_menu.get_user_choice.side_effect = ["Analyze a repository", "Exit"]
+        mock_menu.prompt_repo_input.return_value = ("owner", "repo")
+        mock_menu.prompt_report_format.return_value = "text"
+        mock_menu.confirm_exit.return_value = True
+        mock_analyze.return_value = (ANALYSIS_DICT, SCORES_DICT)
+        mock_report.generate_text_report.return_value = "report text"
+
+        with patch("builtins.print"):
+            with patch("builtins.input", return_value=""):
+                main.main()
+
+        mock_report.generate_json_report.assert_not_called()
+        mock_report.save_report.assert_called_once_with(
+            "report text", "owner_repo_report.txt"
+        )
+
+    @patch("main.menu")
+    @patch("main.analyze_repository")
+    @patch("main.report")
+    def test_main_handles_save_permission_error(self, mock_report, mock_analyze, mock_menu):
+        mock_menu.get_user_choice.side_effect = ["Analyze a repository", "Exit"]
+        mock_menu.prompt_repo_input.return_value = ("owner", "repo")
+        mock_menu.prompt_report_format.return_value = "text"
+        mock_menu.confirm_exit.return_value = True
+        mock_analyze.return_value = (ANALYSIS_DICT, SCORES_DICT)
+        mock_report.generate_text_report.return_value = "report text"
+        mock_report.save_report.side_effect = PermissionError("denied")
+
+        with patch("builtins.print") as mock_print:
+            with patch("builtins.input", return_value=""):
+                main.main()
+
+        self.assertTrue(
+            any("Access" in str(c) for c in mock_print.call_args_list)
+        )
+
+    @patch("main.menu")
+    @patch("main.analyze_repository")
+    @patch("main.report")
+    def test_main_handles_save_io_error(self, mock_report, mock_analyze, mock_menu):
+        mock_menu.get_user_choice.side_effect = ["Analyze a repository", "Exit"]
+        mock_menu.prompt_repo_input.return_value = ("owner", "repo")
+        mock_menu.prompt_report_format.return_value = "text"
+        mock_menu.confirm_exit.return_value = True
+        mock_analyze.return_value = (ANALYSIS_DICT, SCORES_DICT)
+        mock_report.generate_text_report.return_value = "report text"
+        mock_report.save_report.side_effect = IOError("disk full")
+
+        with patch("builtins.print") as mock_print:
+            with patch("builtins.input", return_value=""):
+                main.main()
+
+        self.assertTrue(
+            any("disk full" in str(c) for c in mock_print.call_args_list)
+        )
 
 
 if __name__ == "__main__":

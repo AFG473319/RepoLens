@@ -72,4 +72,4 @@ def confirm_exit() -> bool:
         True if the user confirms exit, False otherwise.
     """
     user_input = input("Do you really want to exit?(y/n): ")
-    return user_input.lower() in ("y", "yes")
+    return user_input.strip().lower() in ("y", "yes")
