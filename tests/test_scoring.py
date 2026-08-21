@@ -120,6 +120,15 @@ class TestCalculateMaintainabilityScore(unittest.TestCase):
         })
         self.assertAlmostEqual(result, 15.0)
 
+    def test_repo_with_empty_string_description(self):
+        result = calculate_maintainability_score({
+            "stars": 0,
+            "forks": 0,
+            "description": "",
+            "language": "Python",
+        })
+        self.assertAlmostEqual(result, 15.0)
+
     def test_missing_keys_defaults_to_zero(self):
         result = calculate_maintainability_score({})
         self.assertAlmostEqual(result, 0.0)

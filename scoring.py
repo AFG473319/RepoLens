@@ -53,7 +53,8 @@ def calculate_maintainability_score(repo_data: dict) -> float:
     """
     stars = repo_data.get("stars", 0)
     forks = repo_data.get("forks", 0)
-    has_description = repo_data.get("description") is not None
+    description = repo_data.get("description")
+    has_description = bool(description)
     has_language = repo_data.get("language") is not None
 
     score = 0.0
