@@ -51,7 +51,7 @@ def _fetch(owner: str, repo: str, endpoint: str, expected_type, api_key: str | N
     Raises:
         TypeError: If the response is not of the expected type.
     """
-    data = get_repo(owner, repo, endpoint, api_key)
+    data = get_repo(owner, repo, endpoint, api_key=api_key)
     if not isinstance(data, expected_type):
         raise TypeError(f"Expected {expected_type.__name__} response from API, got {type(data).__name__}")
     return data

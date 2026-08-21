@@ -51,7 +51,7 @@ class TestGetCommits(unittest.TestCase):
         result = github.get_commits("owner", "repo")
         self.assertIsInstance(result, list)
         self.assertEqual(len(result), 1)
-        mock_get_repo.assert_called_once_with("owner", "repo", "/commits", None)
+        mock_get_repo.assert_called_once_with("owner", "repo", "/commits", api_key=None)
 
     @patch("github.get_repo")
     def test_get_commits_raises_type_error_if_not_list(self, mock_get_repo):
@@ -72,7 +72,7 @@ class TestGetContributors(unittest.TestCase):
         self.assertIsInstance(result, list)
         self.assertEqual(result[0]["login"], "Alice")
         mock_get_repo.assert_called_once_with(
-            "owner", "repo", "/contributors", None
+            "owner", "repo", "/contributors", api_key=None
         )
 
     @patch("github.get_repo")
@@ -92,7 +92,7 @@ class TestGetLanguages(unittest.TestCase):
         self.assertIsInstance(result, dict)
         self.assertEqual(result["Python"], 1000)
         mock_get_repo.assert_called_once_with(
-            "owner", "repo", "/languages", None
+            "owner", "repo", "/languages", api_key=None
         )
 
     @patch("github.get_repo")
@@ -115,7 +115,7 @@ class TestGetIssues(unittest.TestCase):
         self.assertIsInstance(result, list)
         self.assertEqual(len(result), 2)
         mock_get_repo.assert_called_once_with(
-            "owner", "repo", "/issues?state=all", None
+            "owner", "repo", "/issues?state=all", api_key=None
         )
 
     @patch("github.get_repo")
