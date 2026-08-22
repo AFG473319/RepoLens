@@ -101,7 +101,9 @@ python main.py
 > 1
 Enter the repository owner: torvalds
 Enter the repository name: linux
-Enter the report format: json
+1. Text
+2. JSON
+> 2
 
 Fetching data from GitHub...
 
@@ -116,17 +118,17 @@ Report saved to torvalds_linux_report.json
 
 ## Metrics & Scoring
 
-RepoLens evaluates repositories across three dimensions:
+RepoLens evaluates repositories across three dimensions, weighted equally:
 
 | Dimension | Weight | Factors |
 |-----------|--------|---------|
-| **Activity** | 33% | Total commits, recency of latest commit |
-| **Community** | 33% | Contributor count, issue closure rate |
-| **Maintainability** | 33% | Stars, forks, description presence, language detection |
+| **Activity** | 1/3 | Total commits, whether the latest commit is within the last 90 days |
+| **Community** | 1/3 | Contributor count, issue closure rate |
+| **Maintainability** | 1/3 | Stars, forks, description presence, language detection |
 
 ### Score Calculation
 
-- **Activity Score** — Based on commit count (logarithmic scale) with a bonus for recent activity
+- **Activity Score** — Based on commit count (logarithmic scale) with a bonus if the latest commit is within the last 90 days
 - **Community Score** — Combines contributor count and ratio of closed to total issues
 - **Maintainability Score** — Derived from stars, forks, and repository metadata completeness
 - **Health Score** — Average of the three dimension scores
@@ -161,6 +163,9 @@ RepoLens/
 │   ├── test_report.py
 │   └── test_scoring.py
 ├── .env               # Optional: GitHub API key (gitignored)
+├── .env.example       # Template for .env
+├── requirements.txt   # Python dependencies
+├── LICENSE
 ├── .gitignore
 └── README.md
 ```
@@ -215,3 +220,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 - [GitHub REST API](https://docs.github.com/en/rest) for providing repository data
 - [Rich](https://github.com/Textualize/rich) for beautiful terminal formatting
+- [rich-pyfiglet](https://github.com/empicano/ascii-art) for the CLI banner
