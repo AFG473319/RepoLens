@@ -1,6 +1,6 @@
 # RepoLens
 
-[![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&logoColor=white)](https://python.org)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![GitHub API](https://img.shields.io/badge/GitHub-REST%20API-black?logo=github&logoColor=white)](https://docs.github.com/en/rest)
 
@@ -41,7 +41,7 @@ RepoLens fetches repository data from the GitHub API, analyzes key metrics acros
 
 ## Prerequisites
 
-- Python 3.9 or higher
+- Python 3.10 or higher
 - `pip` package manager
 - Git (for cloning the repository)
 
