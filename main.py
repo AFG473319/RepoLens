@@ -1,4 +1,7 @@
 import os
+
+import requests
+
 import dotenv
 import menu
 import github
@@ -87,11 +90,11 @@ def main() -> None:
                     report.save_report(report_content, filename)
                     print(f"\nReport saved to {filename}")
                 except PermissionError as e:
-                    print(f"Error: I don't Have Access To {filename}")
+                    print(f"Error: cannot write {filename}: {e}")
                 except IOError as e:
                     print(f"Error: {e}")
-                
-            except Exception as e:
+
+            except (requests.RequestException, TypeError) as e:
                 print(f"\nError: {e}")
             
             input("\nPress Enter to continue...")

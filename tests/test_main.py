@@ -1,5 +1,8 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import requests
+
 import main
 
 
@@ -231,7 +234,7 @@ class TestMain(unittest.TestCase):
         mock_menu.prompt_repo_input.return_value = ("owner", "repo")
         mock_menu.prompt_report_format.return_value = "text"
         mock_menu.confirm_exit.return_value = True
-        mock_analyze.side_effect = Exception("API Error")
+        mock_analyze.side_effect = requests.RequestException("API Error")
 
         with patch("builtins.print"):
             with patch("builtins.input", return_value=""):
@@ -297,7 +300,7 @@ class TestMain(unittest.TestCase):
                 main.main()
 
         self.assertTrue(
-            any("Access" in str(c) for c in mock_print.call_args_list)
+            any("cannot write owner_repo_report.txt" in str(c) for c in mock_print.call_args_list)
         )
 
     @patch("main.menu")
