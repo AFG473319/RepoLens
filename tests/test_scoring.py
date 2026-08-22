@@ -1,4 +1,6 @@
 import unittest
+from datetime import datetime, timedelta, timezone
+
 from scoring import (
     calculate_activity_score,
     calculate_community_score,
@@ -6,6 +8,18 @@ from scoring import (
     calculate_health_score,
     grade_score,
 )
+
+
+def _recent_date(days_ago: int = 1) -> str:
+    """Return an ISO date string ``days_ago`` days before now."""
+    dt = datetime.now(timezone.utc) - timedelta(days=days_ago)
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _stale_date() -> str:
+    """Return an ISO date string well outside the recency window."""
+    dt = datetime.now(timezone.utc) - timedelta(days=365)
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class TestCalculateActivityScore(unittest.TestCase):
@@ -25,7 +39,7 @@ class TestCalculateActivityScore(unittest.TestCase):
     def test_with_latest_commit_date(self):
         result = calculate_activity_score({
             "total_commits": 10,
-            "latest_commit_date": "2024-06-15",
+            "latest_commit_date": _recent_date(),
         })
         self.assertTrue(result > 10)
 
@@ -39,7 +53,7 @@ class TestCalculateActivityScore(unittest.TestCase):
     def test_score_capped_at_100(self):
         result = calculate_activity_score({
             "total_commits": 100000,
-            "latest_commit_date": "2024-06-15",
+            "latest_commit_date": _recent_date(),
         })
         self.assertLessEqual(result, 100.0)
 
@@ -54,9 +68,23 @@ class TestCalculateActivityScore(unittest.TestCase):
     def test_precise_value_with_bonus(self):
         result = calculate_activity_score({
             "total_commits": 9,
-            "latest_commit_date": "2024-06-15",
+            "latest_commit_date": _recent_date(),
         })
         self.assertEqual(result, 30.0)
+
+    def test_stale_commit_gets_no_bonus(self):
+        result = calculate_activity_score({
+            "total_commits": 9,
+            "latest_commit_date": _stale_date(),
+        })
+        self.assertEqual(result, 20.0)
+
+    def test_unparseable_date_gets_no_bonus(self):
+        result = calculate_activity_score({
+            "total_commits": 9,
+            "latest_commit_date": "not-a-date",
+        })
+        self.assertEqual(result, 20.0)
 
     def test_rounds_to_two_decimals(self):
         result = calculate_activity_score({"total_commits": 10})
@@ -69,7 +97,7 @@ class TestCalculateActivityScore(unittest.TestCase):
     def test_bonus_beyond_cap_still_100(self):
         result = calculate_activity_score({
             "total_commits": 99999,
-            "latest_commit_date": "2024-06-15",
+            "latest_commit_date": _recent_date(),
         })
         self.assertEqual(result, 100.0)
 
@@ -261,7 +289,7 @@ class TestCalculateMaintainabilityScore(unittest.TestCase):
 class TestCalculateHealthScore(unittest.TestCase):
     def test_health_score_averages_subscores(self):
         analysis = {
-            "commits": {"total_commits": 10, "latest_commit_date": "2024-06-15"},
+            "commits": {"total_commits": 10, "latest_commit_date": _recent_date()},
             "contributors": {"total_contributors": 5},
             "issues": {"total_issues": 10, "closed_issues": 5},
             "repo": {"stars": 10, "forks": 5, "description": "A", "language": "Python"},

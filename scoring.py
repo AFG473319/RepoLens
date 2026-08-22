@@ -1,4 +1,8 @@
 import math
+from datetime import datetime, timezone
+
+RECENCY_BONUS_DAYS = 90
+RECENCY_BONUS_POINTS = 10.0
 
 
 def calculate_activity_score(commits_data: dict) -> float:
@@ -14,10 +18,31 @@ def calculate_activity_score(commits_data: dict) -> float:
     total_commits = commits_data.get("total_commits", 0)
     score = min(100.0, math.log10(total_commits + 1) * 20)
 
-    if commits_data.get("latest_commit_date"):
-        score += 10
+    latest_commit_date = commits_data.get("latest_commit_date")
+    if latest_commit_date and _committed_within_days(latest_commit_date):
+        score += RECENCY_BONUS_POINTS
 
     return round(min(score, 100.0), 2)
+
+
+def _committed_within_days(date_str: str, days: int = RECENCY_BONUS_DAYS) -> bool:
+    """Check whether an ISO-8601 timestamp is within the last ``days`` days.
+
+    Args:
+        date_str: ISO-8601 date string (e.g. GitHub commit dates).
+        days: Recency window in days.
+
+    Returns:
+        True if the date is recent; False if it is older or unparseable.
+    """
+    try:
+        commit_date = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        if commit_date.tzinfo is None:
+            commit_date = commit_date.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return False
+    now = datetime.now(timezone.utc)
+    return (now - commit_date).days <= days
 
 
 def calculate_community_score(contributors_data: dict, issues_data: dict) -> float:
