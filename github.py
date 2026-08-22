@@ -64,6 +64,15 @@ def _fetch(
             if attempt < max_retries:
                 time.sleep(retry_after)
                 continue
+            if api_key:
+                raise requests.exceptions.HTTPError(
+                    f"GitHub API rate limit exceeded for {url}. "
+                    "Your API key is rate limited — wait and try again later."
+                )
+            raise requests.exceptions.HTTPError(
+                f"GitHub API rate limit exceeded for {url}. "
+                "Wait and try again, or set an API key to raise the limit."
+            )
         elif response.status_code >= 500:
             if attempt < max_retries:
                 time.sleep(2 ** attempt)
