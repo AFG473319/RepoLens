@@ -36,3 +36,9 @@ improvements.md
 .freebuff
 implementation_plan.md
 AGENTS.md
+.zcode/
+*_report.md
+*_report.html
+*_report.csv
+_write_features.py
+feature_ideas.md

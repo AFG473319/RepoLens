@@ -181,7 +181,9 @@ class TestGetRetries(unittest.TestCase):
 
     @patch("github.time.sleep")
     @patch("github.requests.get")
-    def test_429_without_retry_after_defaults_to_one_second(self, mock_get, mock_sleep):
+    def test_429_without_retry_after_defaults_to_sixty_seconds(
+        self, mock_get, mock_sleep
+    ):
         rate_limited = _mock_response({"message": "rate limited"})
         rate_limited.status_code = 429
         rate_limited.headers = {}
@@ -190,7 +192,7 @@ class TestGetRetries(unittest.TestCase):
         result = github.get_repo("owner", "repo")
 
         self.assertEqual(result, {"name": "test-repo"})
-        mock_sleep.assert_called_once_with(1)
+        mock_sleep.assert_called_once_with(60)
 
     @patch("github.time.sleep")
     @patch("github.requests.get")
@@ -239,39 +241,179 @@ class TestGetRetries(unittest.TestCase):
 
 class TestRetryAfterSeconds(unittest.TestCase):
     def test_missing_header_returns_default(self):
-        self.assertEqual(github._retry_after_seconds({}), 1)
+        self.assertEqual(github._retry_after_seconds({}), 60)
 
     def test_empty_header_returns_default(self):
-        self.assertEqual(github._retry_after_seconds({"Retry-After": ""}), 1)
+        self.assertEqual(github._retry_after_seconds({"Retry-After": ""}), 60)
 
     def test_valid_seconds_parsed(self):
         self.assertEqual(github._retry_after_seconds({"Retry-After": "5"}), 5)
 
-    def test_zero_clamped_to_default(self):
+    def test_zero_clamped_to_one_second_floor(self):
         self.assertEqual(github._retry_after_seconds({"Retry-After": "0"}), 1)
 
-    def test_negative_clamped_to_default(self):
+    def test_negative_clamped_to_one_second_floor(self):
         self.assertEqual(github._retry_after_seconds({"Retry-After": "-5"}), 1)
 
     def test_garbage_returns_default(self):
-        self.assertEqual(github._retry_after_seconds({"Retry-After": "garbage"}), 1)
+        self.assertEqual(
+            github._retry_after_seconds({"Retry-After": "garbage"}), 60
+        )
 
     def test_http_date_falls_back_to_default(self):
         self.assertEqual(
             github._retry_after_seconds(
                 {"Retry-After": "Wed, 21 Oct 2015 07:28:00 GMT"}
             ),
-            1,
+            60,
         )
 
     def test_custom_default_respected(self):
         self.assertEqual(github._retry_after_seconds({}, default=3), 3)
         self.assertEqual(
-            github._retry_after_seconds({"Retry-After": "0"}, default=3), 3
+            github._retry_after_seconds({"Retry-After": "garbage"}, default=3),
+            3,
         )
         self.assertEqual(
             github._retry_after_seconds({"Retry-After": "10"}, default=3), 10
         )
+
+
+class TestRateLimited(unittest.TestCase):
+    def _response(self, status_code, headers=None):
+        response = MagicMock()
+        response.status_code = status_code
+        response.headers = headers if headers is not None else {}
+        return response
+
+    def test_429_is_always_rate_limited(self):
+        self.assertTrue(github._rate_limited(self._response(429)))
+        self.assertTrue(
+            github._rate_limited(self._response(429, {"Retry-After": "1"}))
+        )
+
+    def test_403_with_retry_after_is_secondary_limit(self):
+        self.assertTrue(
+            github._rate_limited(self._response(403, {"Retry-After": "30"}))
+        )
+
+    def test_403_with_exhausted_primary_limit(self):
+        self.assertTrue(
+            github._rate_limited(
+                self._response(403, {"x-ratelimit-remaining": "0"})
+            )
+        )
+
+    def test_plain_403_is_a_permission_error_not_a_rate_limit(self):
+        self.assertFalse(github._rate_limited(self._response(403)))
+
+    def test_other_statuses_are_not_rate_limited(self):
+        for status in (200, 204, 404, 500):
+            self.assertFalse(github._rate_limited(self._response(status)))
+
+
+class TestResetTime(unittest.TestCase):
+    def test_missing_header_returns_none(self):
+        self.assertIsNone(github._reset_time({}))
+
+    def test_valid_epoch_formats_as_utc_clock_time(self):
+        # 2025-01-01T00:00:00Z as epoch seconds.
+        self.assertEqual(github._reset_time({"x-ratelimit-reset": "1735689600"}),
+                         "00:00 UTC")
+
+    def test_garbage_returns_none(self):
+        self.assertIsNone(github._reset_time({"x-ratelimit-reset": "soon"}))
+
+
+class TestRateLimitHandling(unittest.TestCase):
+    @patch("github.time.sleep")
+    @patch("github.requests.get")
+    def test_403_primary_limit_raises_immediately_without_sleeping(
+        self, mock_get, mock_sleep
+    ):
+        exhausted = _status_response(403, headers={"x-ratelimit-remaining": "0"})
+        mock_get.return_value = exhausted
+
+        with self.assertRaises(requests.exceptions.HTTPError) as ctx:
+            github.get_repo("owner", "repo")
+
+        self.assertIn("rate limit exceeded", str(ctx.exception))
+        self.assertEqual(mock_get.call_count, 1)
+        mock_sleep.assert_not_called()
+
+    @patch("github.time.sleep")
+    @patch("github.requests.get")
+    def test_403_primary_limit_message_includes_reset_time(
+        self, mock_get, mock_sleep
+    ):
+        exhausted = _status_response(
+            403,
+            headers={
+                "x-ratelimit-remaining": "0",
+                "x-ratelimit-reset": "1735689600",
+            },
+        )
+        mock_get.return_value = exhausted
+
+        with self.assertRaises(requests.exceptions.HTTPError) as ctx:
+            github.get_repo("owner", "repo")
+
+        self.assertIn("resets at 00:00 UTC", str(ctx.exception))
+
+    @patch("github.time.sleep")
+    @patch("github.requests.get")
+    def test_403_with_retry_after_is_retried_then_succeeds(
+        self, mock_get, mock_sleep
+    ):
+        secondary = _status_response(403, headers={"Retry-After": "2"})
+        mock_get.side_effect = [secondary, _mock_response({"name": "test-repo"})]
+
+        result = github.get_repo("owner", "repo")
+
+        self.assertEqual(result, {"name": "test-repo"})
+        self.assertEqual(mock_get.call_count, 2)
+        mock_sleep.assert_called_once_with(2)
+
+    @patch("github.time.sleep")
+    @patch("github.requests.get")
+    def test_403_secondary_limit_backoff_escalates(self, mock_get, mock_sleep):
+        responses = [
+            _status_response(403, headers={"Retry-After": "10"})
+            for _ in range(3)
+        ] + [_mock_response({"name": "test-repo"})]
+        mock_get.side_effect = responses
+
+        result = github.get_repo("owner", "repo")
+
+        self.assertEqual(result, {"name": "test-repo"})
+        self.assertEqual([c[0][0] for c in mock_sleep.call_args_list], [10, 20, 40])
+
+    @patch("github.time.sleep")
+    @patch("github.requests.get")
+    def test_plain_403_is_raised_as_is_without_retry(self, mock_get, mock_sleep):
+        forbidden = _status_response(403)
+        forbidden.raise_for_status.side_effect = requests.exceptions.HTTPError("403")
+        mock_get.return_value = forbidden
+
+        with self.assertRaises(requests.exceptions.HTTPError):
+            github.get_repo("owner", "repo")
+
+        self.assertEqual(mock_get.call_count, 1)
+        mock_sleep.assert_not_called()
+
+    @patch("github.time.sleep")
+    @patch("github.requests.get")
+    def test_exhausted_secondary_limit_message_mentions_api_key(
+        self, mock_get, mock_sleep
+    ):
+        secondary = _status_response(429, headers={"Retry-After": "1"})
+        mock_get.return_value = secondary
+
+        with self.assertRaises(requests.exceptions.HTTPError) as ctx:
+            github.get_repo("owner", "repo", api_key="secret")
+
+        self.assertIn("Your API key is rate limited", str(ctx.exception))
+        self.assertEqual(mock_get.call_count, 4)
 
 
 class TestValidateType(unittest.TestCase):
@@ -414,6 +556,18 @@ class TestPaginate(unittest.TestCase):
         with self.assertRaises(TypeError):
             github._paginate("owner", "repo", "/commits")
 
+    @patch("github._fetch")
+    def test_returns_empty_list_on_204_empty_repository(self, mock_fetch):
+        empty = MagicMock()
+        empty.status_code = 204
+        empty.links = {}
+        mock_fetch.return_value = empty
+
+        result = github._paginate("owner", "repo", "/contributors")
+
+        self.assertEqual(result, [])
+        mock_fetch.assert_called_once()
+
 
 class TestGetCommits(unittest.TestCase):
     @patch("github._paginate")
@@ -443,6 +597,25 @@ class TestGetCommits(unittest.TestCase):
         mock_paginate.side_effect = TypeError("Expected list response from API, got dict")
 
         with self.assertRaises(TypeError):
+            github.get_commits("owner", "repo")
+
+    @patch("github._paginate")
+    def test_empty_repo_409_returns_empty_list(self, mock_paginate):
+        error = requests.exceptions.HTTPError("409")
+        error.response = MagicMock(status_code=409)
+        mock_paginate.side_effect = error
+
+        result = github.get_commits("owner", "repo")
+
+        self.assertEqual(result, [])
+
+    @patch("github._paginate")
+    def test_other_http_errors_are_reraised(self, mock_paginate):
+        error = requests.exceptions.HTTPError("404")
+        error.response = MagicMock(status_code=404)
+        mock_paginate.side_effect = error
+
+        with self.assertRaises(requests.exceptions.HTTPError):
             github.get_commits("owner", "repo")
 
 
