@@ -78,7 +78,12 @@ def generate_json_report(analysis: dict, scores: dict) -> str:
     """
     data = {
         "analysis": analysis,
-        "scores": scores
+        "scores": scores,
+        # Always present so consumers of the JSON schema can rely on
+        # these keys regardless of which pipeline version produced
+        # the analysis payload.
+        "approximate": bool(analysis.get("approximate", False)),
+        "truncated_endpoints": list(analysis.get("truncated_endpoints", [])),
     }
     return json.dumps(data, indent=4)
 
@@ -95,12 +100,27 @@ def save_report(report_content: str, filename: str) -> None:
         file_handle.write(report_content)
 
 
-def print_summary(scores: dict) -> None:
+def print_summary(scores: dict, analysis: dict | None = None) -> None:
     """Print a brief summary of scores to the console.
 
     Args:
         scores: Dictionary containing calculated scores.
+        analysis: Optional analyzed metrics dictionary. When pagination
+            was capped ("approximate" is truthy), a warning listing the
+            truncated endpoints is printed after the scores so counts
+            are not mistaken for exact totals.
     """
     print("Summary")
     print(f"  Health score: {scores.get('health_score')}")
     print(f"  Grade: {scores.get('grade')}")
+
+    if analysis and analysis.get("approximate", False):
+        limit = github.MAX_PAGES * github.PER_PAGE
+        truncated_endpoints = ", ".join(analysis.get("truncated_endpoints", []))
+        message = (
+            "\nWarning: counts are approximate because one or more GitHub"
+            f" endpoints returned more than {limit} results."
+        )
+        if truncated_endpoints:
+            message += f"\nTruncated endpoints: {truncated_endpoints}"
+        print(message)

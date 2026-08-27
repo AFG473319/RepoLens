@@ -97,7 +97,7 @@ def main() -> None:
                 analysis, scores = analyze_repository(owner, repo)
                 
                 print("\n")
-                report.print_summary(scores)
+                report.print_summary(scores, analysis)
                 
                 if report_format.lower() == "json":
                     report_content = report.generate_json_report(analysis, scores)

@@ -170,18 +170,66 @@ class TestGenerateJsonReport(unittest.TestCase):
         self.assertIn("\n", result)
         self.assertIn("    ", result)
 
+    def test_json_includes_truncation_flags(self):
+        analysis = {
+            "repo": {"name": "test"},
+            "approximate": True,
+            "truncated_endpoints": ["commits", "issues"],
+        }
+        scores = {"health_score": 85.5}
+
+        parsed = json.loads(generate_json_report(analysis, scores))
+
+        self.assertTrue(parsed["approximate"])
+        self.assertEqual(parsed["truncated_endpoints"], ["commits", "issues"])
+        self.assertTrue(parsed["analysis"]["approximate"])
+
+    def test_json_defaults_truncation_flags_when_missing(self):
+        analysis = {"repo": {"name": "test"}}
+        scores = {}
+
+        result = generate_json_report(analysis, scores)
+
+        self.assertEqual(
+            json.loads(result)["approximate"], False,
+        )
+        self.assertEqual(
+            json.loads(result)["truncated_endpoints"], [],
+        )
+
     def test_round_trip_equality(self):
-        analysis = {"repo": {"name": "test"}, "issues": {"total_issues": 5}}
+        analysis = {
+            "repo": {"name": "test"},
+            "issues": {"total_issues": 5},
+            "approximate": False,
+            "truncated_endpoints": [],
+        }
         scores = {"health_score": 85.5, "grade": "B"}
 
         parsed = json.loads(generate_json_report(analysis, scores))
 
-        self.assertEqual(parsed, {"analysis": analysis, "scores": scores})
+        self.assertEqual(
+            parsed,
+            {
+                "analysis": analysis,
+                "scores": scores,
+                "approximate": False,
+                "truncated_endpoints": [],
+            },
+        )
 
     def test_empty_inputs_still_valid(self):
         result = generate_json_report({}, {})
 
-        self.assertEqual(json.loads(result), {"analysis": {}, "scores": {}})
+        self.assertEqual(
+            json.loads(result),
+            {
+                "analysis": {},
+                "scores": {},
+                "approximate": False,
+                "truncated_endpoints": [],
+            },
+        )
 
 
 class TestSaveReport(unittest.TestCase):
@@ -246,6 +294,44 @@ class TestPrintSummary(unittest.TestCase):
             mock_print.call_args_list,
             [call("Summary"), call("  Health score: 85.5"), call("  Grade: B")],
         )
+
+    @patch("builtins.print")
+    def test_print_summary_warns_when_approximate(self, mock_print):
+        scores = {"health_score": 85.5, "grade": "B"}
+        analysis = {
+            "approximate": True,
+            "truncated_endpoints": ["commits", "issues"],
+        }
+
+        print_summary(scores, analysis)
+
+        calls = [str(call) for call in mock_print.call_args_list]
+        self.assertTrue(any("approximate" in call.lower() for call in calls))
+        self.assertTrue(
+            any(f"{github.MAX_PAGES * github.PER_PAGE} results" in call
+                for call in calls)
+        )
+        self.assertTrue(any("Truncated endpoints: commits, issues" in call
+                            for call in calls))
+
+    @patch("builtins.print")
+    def test_print_summary_no_warning_without_analysis(self, mock_print):
+        scores = {"health_score": 85.5, "grade": "B"}
+
+        print_summary(scores)
+
+        calls = [str(call) for call in mock_print.call_args_list]
+        self.assertFalse(any("Warning" in call for call in calls))
+
+    @patch("builtins.print")
+    def test_print_summary_no_warning_when_not_approximate(self, mock_print):
+        scores = {"health_score": 85.5, "grade": "B"}
+        analysis = {"approximate": False, "truncated_endpoints": []}
+
+        print_summary(scores, analysis)
+
+        calls = [str(call) for call in mock_print.call_args_list]
+        self.assertFalse(any("Warning" in call for call in calls))
 
 
 if __name__ == "__main__":
