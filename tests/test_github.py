@@ -249,6 +249,12 @@ class TestRetryAfterSeconds(unittest.TestCase):
     def test_valid_seconds_parsed(self):
         self.assertEqual(github._retry_after_seconds({"Retry-After": "5"}), 5)
 
+    def test_large_value_falls_back_to_default(self):
+        self.assertEqual(github._retry_after_seconds({"Retry-After": "150"}), 60)
+
+    def test_value_at_cap_is_honored(self):
+        self.assertEqual(github._retry_after_seconds({"Retry-After": "100"}), 100)
+
     def test_zero_clamped_to_one_second_floor(self):
         self.assertEqual(github._retry_after_seconds({"Retry-After": "0"}), 1)
 
@@ -451,9 +457,10 @@ class TestPaginate(unittest.TestCase):
             _mock_response([{"n": 3}]),
         ]
 
-        result = github._paginate("owner", "repo", "/commits")
+        result, truncated = github._paginate("owner", "repo", "/commits")
 
         self.assertEqual(result, [{"n": 1}, {"n": 2}, {"n": 3}])
+        self.assertFalse(truncated)
         self.assertEqual(mock_get.call_count, 2)
         mock_get.assert_any_call(
             "https://api.github.com/repos/owner/repo/commits?per_page=100",
@@ -470,18 +477,20 @@ class TestPaginate(unittest.TestCase):
     def test_single_page(self, mock_get):
         mock_get.return_value = _mock_response([{"n": 1}])
 
-        result = github._paginate("owner", "repo", "/commits")
+        result, truncated = github._paginate("owner", "repo", "/commits")
 
         self.assertEqual(result, [{"n": 1}])
+        self.assertFalse(truncated)
         mock_get.assert_called_once()
 
     @patch("github._fetch")
     def test_empty_first_page(self, mock_get):
         mock_get.return_value = _mock_response([])
 
-        result = github._paginate("owner", "repo", "/commits")
+        result, truncated = github._paginate("owner", "repo", "/commits")
 
         self.assertEqual(result, [])
+        self.assertFalse(truncated)
 
     @patch("github._fetch")
     def test_appends_to_existing_query_string(self, mock_get):
@@ -515,9 +524,10 @@ class TestPaginate(unittest.TestCase):
             next_url="https://api.github.com/repos/owner/repo/commits?per_page=100&page=2",
         )
 
-        result = github._paginate("owner", "repo", "/commits")
+        result, truncated = github._paginate("owner", "repo", "/commits")
 
         self.assertEqual(len(result), github.MAX_PAGES)
+        self.assertTrue(truncated)
         self.assertEqual(mock_get.call_count, github.MAX_PAGES)
         mock_print.assert_called_once()
         self.assertIn("approximate", mock_print.call_args[0][0])
@@ -531,8 +541,9 @@ class TestPaginate(unittest.TestCase):
             _mock_response([{"n": 2}]),
         ]
 
-        github._paginate("owner", "repo", "/commits")
+        result, truncated = github._paginate("owner", "repo", "/commits")
 
+        self.assertFalse(truncated)
         mock_print.assert_not_called()
 
     @patch("builtins.print")
@@ -544,9 +555,10 @@ class TestPaginate(unittest.TestCase):
             responses.append(_mock_response([{"n": i}], next_url=next_url))
         mock_get.side_effect = responses
 
-        result = github._paginate("owner", "repo", "/commits")
+        result, truncated = github._paginate("owner", "repo", "/commits")
 
         self.assertEqual(len(result), github.MAX_PAGES)
+        self.assertFalse(truncated)
         mock_print.assert_not_called()
 
     @patch("github.requests.get")
@@ -563,22 +575,46 @@ class TestPaginate(unittest.TestCase):
         empty.links = {}
         mock_fetch.return_value = empty
 
-        result = github._paginate("owner", "repo", "/contributors")
+        result, truncated = github._paginate("owner", "repo", "/contributors")
 
         self.assertEqual(result, [])
+        self.assertFalse(truncated)
         mock_fetch.assert_called_once()
+
+    @patch("builtins.print")
+    @patch("github._fetch")
+    def test_truncated_flag_true_when_page_cap_hit(self, mock_get, mock_print):
+        mock_get.return_value = _mock_response(
+            [{"n": 1}],
+            next_url="https://api.github.com/repos/owner/repo/commits?per_page=100&page=2",
+        )
+
+        _result, truncated = github._paginate("owner", "repo", "/commits")
+
+        self.assertTrue(truncated)
+
+    @patch("github._fetch")
+    def test_truncated_flag_false_when_all_pages_fetched(self, mock_get):
+        mock_get.side_effect = [
+            _mock_response([{"n": 1}], next_url="https://example.com/page=2"),
+            _mock_response([{"n": 2}]),
+        ]
+
+        _result, truncated = github._paginate("owner", "repo", "/commits")
+
+        self.assertFalse(truncated)
 
 
 class TestGetCommits(unittest.TestCase):
     @patch("github._paginate")
-    def test_get_commits_returns_list(self, mock_paginate):
-        mock_paginate.return_value = [
-            {"commit": {"author": {"name": "Alice"}}}
-        ]
+    def test_get_commits_returns_tuple(self, mock_paginate):
+        commits = [{"commit": {"author": {"name": "Alice"}}}]
+        mock_paginate.return_value = (commits, False)
 
-        result = github.get_commits("owner", "repo")
+        result, truncated = github.get_commits("owner", "repo")
 
         self.assertIsInstance(result, list)
+        self.assertFalse(truncated)
         self.assertEqual(len(result), 1)
         mock_paginate.assert_called_once_with("owner", "repo", "/commits", api_key=None)
 
@@ -605,9 +641,10 @@ class TestGetCommits(unittest.TestCase):
         error.response = MagicMock(status_code=409)
         mock_paginate.side_effect = error
 
-        result = github.get_commits("owner", "repo")
+        result, truncated = github.get_commits("owner", "repo")
 
         self.assertEqual(result, [])
+        self.assertFalse(truncated)
 
     @patch("github._paginate")
     def test_other_http_errors_are_reraised(self, mock_paginate):
@@ -621,13 +658,14 @@ class TestGetCommits(unittest.TestCase):
 
 class TestGetContributors(unittest.TestCase):
     @patch("github._paginate")
-    def test_get_contributors_returns_list(self, mock_paginate):
-        mock_paginate.return_value = [
-            {"login": "Alice", "contributions": 5}
-        ]
+    def test_get_contributors_returns_tuple(self, mock_paginate):
+        contributors = [{"login": "Alice", "contributions": 5}]
+        mock_paginate.return_value = (contributors, False)
 
-        result = github.get_contributors("owner", "repo")
+        result, truncated = github.get_contributors("owner", "repo")
+
         self.assertIsInstance(result, list)
+        self.assertFalse(truncated)
         self.assertEqual(result[0]["login"], "Alice")
         mock_paginate.assert_called_once_with(
             "owner", "repo", "/contributors", api_key=None
@@ -689,14 +727,17 @@ class TestGetLanguages(unittest.TestCase):
 
 class TestGetIssues(unittest.TestCase):
     @patch("github._paginate")
-    def test_get_issues_returns_list(self, mock_paginate):
-        mock_paginate.return_value = [
+    def test_get_issues_returns_tuple(self, mock_paginate):
+        issues = [
             {"number": 1, "state": "open"},
             {"number": 2, "state": "closed"},
         ]
+        mock_paginate.return_value = (issues, False)
 
-        result = github.get_issues("owner", "repo")
+        result, truncated = github.get_issues("owner", "repo")
+
         self.assertIsInstance(result, list)
+        self.assertFalse(truncated)
         self.assertEqual(len(result), 2)
         mock_paginate.assert_called_once_with(
             "owner", "repo", "/issues?state=all", api_key=None

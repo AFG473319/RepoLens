@@ -3,6 +3,8 @@ import json
 import os
 import tempfile
 from unittest.mock import patch, call, MagicMock
+
+import github
 from report import (
     generate_text_report,
     generate_json_report,
@@ -59,6 +61,29 @@ class TestGenerateTextReport(unittest.TestCase):
         self.assertIn("Unknown", result)
         self.assertIn("No description", result)
         self.assertNotIn("None", result)
+
+    def test_approximate_note_when_truncated(self):
+        analysis = {
+            "approximate": True,
+            "truncated_endpoints": ["commits", "issues"],
+        }
+        scores = {}
+
+        result = generate_text_report(analysis, scores)
+
+        self.assertIn("approximated", result)
+        self.assertIn(
+            f"more than {github.MAX_PAGES * github.PER_PAGE} results", result
+        )
+        self.assertIn("Truncated endpoints: commits, issues", result)
+
+    def test_no_approximate_note_when_not_truncated(self):
+        analysis = {"repo": {}}
+        scores = {}
+
+        result = generate_text_report(analysis, scores)
+
+        self.assertNotIn("approximated", result)
 
     def test_complete_report_specific_lines(self):
         analysis = {

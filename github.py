@@ -69,19 +69,24 @@ def _retry_after_seconds(headers, default: int = 60) -> int:
     """Parse a Retry-After header into seconds to wait.
 
     GitHub sends Retry-After as a delay in seconds; honor it when
-    present, with a one-second floor. When the header is missing,
-    empty, or unparseable, fall back to ``default``: GitHub's rate
-    limit docs direct waiting at least one minute before retrying a
-    secondary limit that carried no Retry-After.
+    present (capped at 100s beyond which the value looks unreliable,
+    so ``default`` is used instead) with a one-second floor. When the
+    header is missing, empty, unparseable, or above the cap, fall back
+    to ``default``: GitHub's rate limit docs direct waiting at least
+    one minute before retrying a secondary limit that carried no
+    Retry-After.
     """
     value = headers.get("Retry-After")
     if not value:
         return default
 
     try:
-        return max(1, int(value))
+        seconds = int(value)
     except ValueError:
         return default
+    if seconds > 100:
+        return default
+    return max(1, seconds)
 
 
 def _fetch(
@@ -117,21 +122,39 @@ def _fetch(
     for attempt in range(max_retries + 1):
         try:
             response = requests.get(url, headers=headers, timeout=10)
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
             if attempt < max_retries:
-                time.sleep(2 ** attempt)
+                wait = 2 ** attempt
+                print(
+                    f"Request failed ({type(e).__name__}); retrying in {wait}s "
+                    f"(attempt {attempt + 1} of {max_retries})...",
+                    file=sys.stderr,
+                )
+                time.sleep(wait)
                 continue
             raise
 
         if _rate_limited(response):
             if not _primary_rate_limit_exhausted(response) and attempt < max_retries:
-                time.sleep(_retry_after_seconds(response.headers) * (2 ** attempt))
+                wait = _retry_after_seconds(response.headers) * (2 ** attempt)
+                print(
+                    f"Rate limited by GitHub on {url}; waiting {wait}s before "
+                    f"retrying (attempt {attempt + 1} of {max_retries})...",
+                    file=sys.stderr,
+                )
+                time.sleep(wait)
                 continue
             raise requests.exceptions.HTTPError(
                 _rate_limit_message(response, url, api_key))
         elif response.status_code >= 500:
             if attempt < max_retries:
-                time.sleep(2 ** attempt)
+                wait = 2 ** attempt
+                print(
+                    f"GitHub server error {response.status_code} on {url}; "
+                    f"retrying in {wait}s (attempt {attempt + 1} of {max_retries})...",
+                    file=sys.stderr,
+                )
+                time.sleep(wait)
                 continue
 
         response.raise_for_status()
@@ -184,7 +207,7 @@ def get_repo(owner: str, repo: str, endpoint: str = "", api_key: str | None = No
     return _fetch(url, api_key=api_key).json()
 
 
-def _paginate(owner: str, repo: str, endpoint: str, api_key: str | None = None) -> list[dict]:
+def _paginate(owner: str, repo: str, endpoint: str, api_key: str | None = None) -> tuple[list[dict], bool]:
     """Fetch every page of a paginated list endpoint.
 
     Requests PER_PAGE items at a time and follows the Link header's
@@ -198,9 +221,10 @@ def _paginate(owner: str, repo: str, endpoint: str, api_key: str | None = None) 
         api_key: Optional GitHub personal access token.
 
     Returns:
-        List of all items across pages. If more pages remain than
-        MAX_PAGES allows, a warning is printed to stderr and the list
-        is truncated, so counts will be approximate.
+        Tuple of (items, truncated). ``items`` is a list of all items
+        across pages; ``truncated`` is True when more pages remained
+        than MAX_PAGES allows — a warning is printed to stderr and the
+        counts will be approximate (lower bounds).
 
     Raises:
         TypeError: If the response is not a list.
@@ -216,21 +240,22 @@ def _paginate(owner: str, repo: str, endpoint: str, api_key: str | None = None) 
         if response.status_code == 204:
             # 204 No Content: GitHub's documented empty-repository
             # answer for /contributors; there are no items to paginate.
-            return []
+            return [], False
         data = response.json()
         items.extend(data)
         url = response.links.get("next", {}).get("url")
 
-    if url:
+    truncated = bool(url)
+    if truncated:
         print(
             f"Warning: {owner}/{repo}{endpoint} has more than {MAX_PAGES * PER_PAGE} results; "
             "counts may be approximate.",
             file=sys.stderr,
         )
-    return items
+    return items, truncated
 
 
-def get_commits(owner: str, repo: str, api_key: str | None = None) -> list[dict]:
+def get_commits(owner: str, repo: str, api_key: str | None = None) -> tuple[list[dict], bool]:
     """Fetch commit history for a repository.
 
     Args:
@@ -239,19 +264,20 @@ def get_commits(owner: str, repo: str, api_key: str | None = None) -> list[dict]
         api_key: Optional GitHub personal access token.
 
     Returns:
-        List of commit dictionaries. Empty when the repository has no
-        commits (GitHub answers 409 Conflict for /commits on empty
-        repos).
+        Tuple of (commits, truncated): a list of commit dictionaries
+        plus whether pagination was capped. Empty list when the
+        repository has no commits (GitHub answers 409 Conflict for
+        /commits on empty repos).
     """
     try:
         return _paginate(owner, repo, "/commits", api_key=api_key)
     except requests.exceptions.HTTPError as e:
         if e.response is not None and e.response.status_code == 409:
-            return []
+            return [], False
         raise
 
 
-def get_contributors(owner: str, repo: str, api_key: str | None = None) -> list[dict]:
+def get_contributors(owner: str, repo: str, api_key: str | None = None) -> tuple[list[dict], bool]:
     """Fetch contributors for a repository.
 
     Args:
@@ -260,7 +286,8 @@ def get_contributors(owner: str, repo: str, api_key: str | None = None) -> list[
         api_key: Optional GitHub personal access token.
 
     Returns:
-        List of contributor dictionaries.
+        Tuple of (contributors, truncated): a list of contributor
+        dictionaries plus whether pagination was capped.
     """
     return _paginate(owner, repo, "/contributors", api_key=api_key)
 
@@ -283,7 +310,7 @@ def get_languages(owner: str, repo: str, api_key: str | None = None) -> dict:
     return _fetch(url, api_key=api_key, expected_type=dict).json()
 
 
-def get_issues(owner: str, repo: str, api_key: str | None = None) -> list[dict]:
+def get_issues(owner: str, repo: str, api_key: str | None = None) -> tuple[list[dict], bool]:
     """Fetch issues for a repository.
 
     Args:
@@ -292,6 +319,7 @@ def get_issues(owner: str, repo: str, api_key: str | None = None) -> list[dict]:
         api_key: Optional GitHub personal access token.
 
     Returns:
-        List of issue dictionaries.
+        Tuple of (issues, truncated): a list of issue dictionaries
+        plus whether pagination was capped.
     """
     return _paginate(owner, repo, "/issues?state=all", api_key=api_key)

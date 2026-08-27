@@ -1,5 +1,7 @@
 import json
 
+import github
+
 
 def generate_text_report(analysis: dict, scores: dict) -> str:
     """Generate a plain text report from analysis and scores.
@@ -16,6 +18,18 @@ def generate_text_report(analysis: dict, scores: dict) -> str:
     contributors = analysis.get("contributors", {})
     languages = analysis.get("languages", {})
     issues = analysis.get("issues", {})
+    if analysis.get("approximate", False):
+        limit = github.MAX_PAGES * github.PER_PAGE
+        approximate = (
+            "\nNote: This report is approximated because one or more GitHub"
+            f" endpoints returned more than {limit} results, so counts are"
+            " lower bounds.\n"
+        )
+        truncated_endpoints = ", ".join(analysis.get("truncated_endpoints", []))
+        if truncated_endpoints:
+            approximate += f"Truncated endpoints: {truncated_endpoints}\n"
+    else:
+        approximate = ""
 
     return (
         "RepoLens Analysis Report\n"
@@ -47,6 +61,7 @@ def generate_text_report(analysis: dict, scores: dict) -> str:
         + f"  Community score: {scores.get('community_score', 0)}\n"
         + f"  Maintainability score: {scores.get('maintainability_score', 0)}\n"
         + f"  Grade: {scores.get('grade', 'N/A')}\n"
+        + f"{approximate}"
     )
 
 

@@ -23,12 +23,17 @@ def analyze_repository(owner: str, repo: str) -> tuple[dict, dict]:
     dotenv.load_dotenv()
     api_key = os.getenv("GITHUB_API_KEY")
     
+    print(f"Fetching repository metadata for {owner}/{repo}...")
     repo_data = github.get_repo(owner, repo, api_key=api_key)
-    commits_data = github.get_commits(owner, repo, api_key)
-    contributors_data = github.get_contributors(owner, repo, api_key)
+    print("Fetching commit history...")
+    commits_data, commits_truncated = github.get_commits(owner, repo, api_key)
+    print("Fetching contributors...")
+    contributors_data, contributors_truncated = github.get_contributors(owner, repo, api_key)
+    print("Fetching language breakdown...")
     languages_data = github.get_languages(owner, repo, api_key)
-    issues_data = github.get_issues(owner, repo, api_key)
-    
+    print("Fetching issues...")
+    issues_data, issues_truncated = github.get_issues(owner, repo, api_key)
+
     analysis = {
         "repo": analyzer.analyze_repo(repo_data),
         "commits": analyzer.analyze_commits(commits_data),
@@ -36,7 +41,21 @@ def analyze_repository(owner: str, repo: str) -> tuple[dict, dict]:
         "languages": analyzer.analyze_languages(languages_data),
         "issues": analyzer.analyze_issues(issues_data)
     }
-    
+
+    # Only list-based endpoints are paginated (and thus can be
+    # truncated); languages and repo metadata return a single payload.
+    truncated_endpoints = [
+        name
+        for name, truncated in (
+            ("commits", commits_truncated),
+            ("contributors", contributors_truncated),
+            ("issues", issues_truncated),
+        )
+        if truncated
+    ]
+    analysis["approximate"] = bool(truncated_endpoints)
+    analysis["truncated_endpoints"] = truncated_endpoints
+
     health_score = scoring.calculate_health_score(analysis)
     
     scores = {

@@ -29,16 +29,16 @@ class TestAnalyzeRepository(unittest.TestCase):
     @patch("main.scoring")
     def test_analyze_repository_pipeline(self, mock_scoring, mock_analyzer, mock_github):
         mock_github.get_repo.return_value = {"name": "test-repo"}
-        mock_github.get_commits.return_value = [
-            {"commit": {"author": {"name": "Alice", "date": "2024-06-15"}}}
-        ]
-        mock_github.get_contributors.return_value = [
-            {"login": "Alice", "contributions": 10}
-        ]
+        mock_github.get_commits.return_value = (
+            [{"commit": {"author": {"name": "Alice", "date": "2024-06-15"}}}], False,
+        )
+        mock_github.get_contributors.return_value = (
+            [{"login": "Alice", "contributions": 10}], False,
+        )
         mock_github.get_languages.return_value = {"Python": 1000}
-        mock_github.get_issues.return_value = [
-            {"state": "open"}, {"state": "closed"}
-        ]
+        mock_github.get_issues.return_value = (
+            [{"state": "open"}, {"state": "closed"}], False,
+        )
 
         mock_analyzer.analyze_repo.return_value = {"name": "test-repo", "stars": 10}
         mock_analyzer.analyze_commits.return_value = {"total_commits": 1, "unique_contributors": 1, "latest_commit_date": "2024-06-15"}
@@ -66,6 +66,60 @@ class TestAnalyzeRepository(unittest.TestCase):
         self.assertEqual(scores["maintainability_score"], 90.0)
         self.assertEqual(scores["grade"], "B")
 
+    @patch("main.github")
+    @patch("main.analyzer")
+    @patch("main.scoring")
+    def test_approximate_flag_set_when_endpoint_truncated(
+        self, mock_scoring, mock_analyzer, mock_github
+    ):
+        mock_github.get_repo.return_value = {}
+        mock_github.get_commits.return_value = ([{"n": 1}], True)
+        mock_github.get_contributors.return_value = ([], False)
+        mock_github.get_languages.return_value = {}
+        mock_github.get_issues.return_value = ([], False)
+
+        for name in (
+            "analyze_repo",
+            "analyze_commits",
+            "analyze_contributors",
+            "analyze_languages",
+            "analyze_issues",
+        ):
+            getattr(mock_analyzer, name).return_value = {}
+        mock_scoring.calculate_health_score.return_value = 0.0
+
+        analysis, _scores = main.analyze_repository("owner", "repo")
+
+        self.assertTrue(analysis["approximate"])
+        self.assertEqual(analysis["truncated_endpoints"], ["commits"])
+
+    @patch("main.github")
+    @patch("main.analyzer")
+    @patch("main.scoring")
+    def test_approximate_flag_unset_when_nothing_truncated(
+        self, mock_scoring, mock_analyzer, mock_github
+    ):
+        mock_github.get_repo.return_value = {}
+        mock_github.get_commits.return_value = ([], False)
+        mock_github.get_contributors.return_value = ([], False)
+        mock_github.get_languages.return_value = {}
+        mock_github.get_issues.return_value = ([], False)
+
+        for name in (
+            "analyze_repo",
+            "analyze_commits",
+            "analyze_contributors",
+            "analyze_languages",
+            "analyze_issues",
+        ):
+            getattr(mock_analyzer, name).return_value = {}
+        mock_scoring.calculate_health_score.return_value = 0.0
+
+        analysis, _scores = main.analyze_repository("owner", "repo")
+
+        self.assertFalse(analysis["approximate"])
+        self.assertEqual(analysis["truncated_endpoints"], [])
+
     @patch("main.dotenv.load_dotenv")
     @patch("main.os.getenv")
     @patch("main.github")
@@ -76,10 +130,10 @@ class TestAnalyzeRepository(unittest.TestCase):
     ):
         mock_getenv.return_value = "secret"
         mock_github.get_repo.return_value = {}
-        mock_github.get_commits.return_value = []
-        mock_github.get_contributors.return_value = []
+        mock_github.get_commits.return_value = ([], False)
+        mock_github.get_contributors.return_value = ([], False)
         mock_github.get_languages.return_value = {}
-        mock_github.get_issues.return_value = []
+        mock_github.get_issues.return_value = ([], False)
 
         mock_analyzer.analyze_repo.return_value = {}
         mock_analyzer.analyze_commits.return_value = {}
@@ -112,10 +166,10 @@ class TestAnalyzeRepository(unittest.TestCase):
         issues_data = [{"state": "open"}]
 
         mock_github.get_repo.return_value = repo_data
-        mock_github.get_commits.return_value = commits_data
-        mock_github.get_contributors.return_value = contributors_data
+        mock_github.get_commits.return_value = (commits_data, False)
+        mock_github.get_contributors.return_value = (contributors_data, False)
         mock_github.get_languages.return_value = languages_data
-        mock_github.get_issues.return_value = issues_data
+        mock_github.get_issues.return_value = (issues_data, False)
 
         mock_analyzer.analyze_repo.return_value = {}
         mock_analyzer.analyze_commits.return_value = {}
@@ -142,10 +196,10 @@ class TestAnalyzeRepository(unittest.TestCase):
     @patch("main.scoring")
     def test_scoring_receives_analysis_subdicts(self, mock_scoring, mock_analyzer, mock_github):
         mock_github.get_repo.return_value = {}
-        mock_github.get_commits.return_value = []
-        mock_github.get_contributors.return_value = []
+        mock_github.get_commits.return_value = ([], False)
+        mock_github.get_contributors.return_value = ([], False)
         mock_github.get_languages.return_value = {}
-        mock_github.get_issues.return_value = []
+        mock_github.get_issues.return_value = ([], False)
 
         mock_analyzer.analyze_repo.return_value = {"stars": 1}
         mock_analyzer.analyze_commits.return_value = {"total_commits": 1}
@@ -170,7 +224,15 @@ class TestAnalyzeRepository(unittest.TestCase):
         health_arg = mock_scoring.calculate_health_score.call_args[0][0]
         self.assertEqual(
             set(health_arg.keys()),
-            {"repo", "commits", "contributors", "languages", "issues"},
+            {
+                "repo",
+                "commits",
+                "contributors",
+                "languages",
+                "issues",
+                "approximate",
+                "truncated_endpoints",
+            },
         )
 
 
