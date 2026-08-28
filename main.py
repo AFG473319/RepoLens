@@ -3,6 +3,7 @@ import os
 import requests
 
 import dotenv
+import cache
 import menu
 import github
 import analyzer
@@ -91,10 +92,43 @@ def main() -> None:
         if user_choice == "Analyze a repository":
             try:
                 owner, repo = menu.prompt_repo_input()
-                report_format = menu.prompt_report_format()
-                
-                print("\nFetching data from GitHub...")
-                analysis, scores = analyze_repository(owner, repo)
+
+                # --- Cache check: if we have a fresh, complete cache, offer to reuse ---
+                cached_data = cache.load_cache(owner, repo)
+                use_cache = False
+                if cached_data is not None and cache.is_cache_valid(cached_data) and cache.is_cache_fresh(cached_data):
+                    age_str = cache.cache_age_string(cached_data)
+                    if menu.prompt_cache_use(owner, repo, age_str):
+                        analysis, scores = cached_data["analysis"], cached_data["scores"]
+                        print(f"\nUsing cached data for {owner}/{repo} ({age_str}) — skipping GitHub fetch.")
+                        use_cache = True
+
+                if not use_cache:
+                    report_format = menu.prompt_report_format()
+
+                    print("\nFetching data from GitHub...")
+                    analysis, scores = analyze_repository(owner, repo)
+
+                    # Save fresh result to cache (every turn, even if cache was stale/invalid)
+                    # Guard: only cache complete payloads (prevents test mocks with incomplete dicts from polluting)
+                    _probe = {
+                        "version": cache.CACHE_VERSION,
+                        "owner": owner,
+                        "repo": repo,
+                        "fetched_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+                        "analysis": analysis,
+                        "scores": scores,
+                    }
+                    if cache.is_cache_valid(_probe):
+                        try:
+                            cache.save_cache(owner, repo, analysis, scores)
+                        except OSError as e:
+                            # Cache failure is non-fatal; warn and continue
+                            print(f"Warning: could not write cache: {e}")
+
+                else:
+                    # Still need report format when serving from cache
+                    report_format = menu.prompt_report_format()
                 
                 print("\n")
                 report.print_summary(scores, analysis)

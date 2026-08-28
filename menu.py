@@ -73,3 +73,25 @@ def confirm_exit() -> bool:
     """
     user_input = input("Do you really want to exit?(y/n): ")
     return user_input.strip().lower() in ("y", "yes")
+
+
+def prompt_cache_use(owner: str, repo: str, age_str: str) -> bool:
+    """Ask whether to reuse a fresh cache instead of fetching.
+
+    Args:
+        owner: Repository owner.
+        repo: Repository name.
+        age_str: Human-readable age, e.g. "5 hours ago".
+
+    Returns:
+        True if the user wants to use the cache, False to refetch.
+    """
+    print(f"\nFound cached analysis for {owner}/{repo} from {age_str}.")
+    print("The cache is recent (within 24h) and contains a complete analysis.")
+    while True:
+        answer = input("Use cached data? (y = use cache, n = fetch fresh) [y/n]: ").strip().lower()
+        if answer in ("y", "yes"):
+            return True
+        if answer in ("n", "no"):
+            return False
+        print("Please enter 'y' or 'n'.")

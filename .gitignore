@@ -42,3 +42,5 @@ AGENTS.md
 *_report.csv
 _write_features.py
 feature_ideas.md
+.repolens_cache/
+.repolens/
