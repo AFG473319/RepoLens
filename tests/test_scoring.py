@@ -2,6 +2,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from scoring import (
+    _recency_bonus,
     calculate_activity_score,
     calculate_community_score,
     calculate_maintainability_score,
@@ -66,11 +67,32 @@ class TestCalculateActivityScore(unittest.TestCase):
         self.assertEqual(result, 20.0)
 
     def test_precise_value_with_bonus(self):
+        # 9 commits -> base 20.0, 1 day ago -> bonus 9.89 (linear decay 10*(1-1/90))
         result = calculate_activity_score({
             "total_commits": 9,
             "latest_commit_date": _recent_date(),
         })
-        self.assertEqual(result, 30.0)
+        self.assertEqual(result, 29.89)
+
+    def test_recency_bonus_scales_linearly(self):
+        # 0 days ago -> full 10, 45 days -> 5.0, 90 days -> 0.0, 91 -> 0.0
+        self.assertEqual(_recency_bonus(_recent_date(days_ago=0)), 10.0)
+        self.assertEqual(_recency_bonus(_recent_date(days_ago=45)), 5.0)
+        self.assertEqual(_recency_bonus(_recent_date(days_ago=90)), 0.0)
+        self.assertEqual(_recency_bonus(_recent_date(days_ago=91)), 0.0)
+
+    def test_recency_bonus_today_beats_60_days_ago(self):
+        today = _recency_bonus(_recent_date(days_ago=0))
+        sixty = _recency_bonus(_recent_date(days_ago=60))
+        eighty_nine = _recency_bonus(_recent_date(days_ago=89))
+        self.assertGreater(today, sixty)
+        self.assertGreater(sixty, eighty_nine)
+        self.assertAlmostEqual(sixty, 3.33, places=2)
+        self.assertAlmostEqual(eighty_nine, 0.11, places=2)
+
+    def test_recency_bonus_future_date_counts_as_today(self):
+        future = (datetime.now(timezone.utc) + timedelta(days=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.assertEqual(_recency_bonus(future), 10.0)
 
     def test_stale_commit_gets_no_bonus(self):
         result = calculate_activity_score({
