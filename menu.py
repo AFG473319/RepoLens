@@ -47,6 +47,20 @@ def get_user_choice(choices: list[str]) -> str:
         print(f"Invalid choice. Please enter a number between 1 and {len(choices)}.")
 
 
+def prompt_settings(current: dict[str, str]) -> dict[str, str]:
+    """Prompt for application settings and return the updated values."""
+    print("\nSettings (press Enter to keep the current value)")
+    current_key = current.get("github_api_key", "")
+    masked_key = ("*" * min(len(current_key), 8)) if current_key else "not set"
+    api_key = input(f"GitHub API key [{masked_key}]: ").strip()
+    if not api_key:
+        api_key = current_key
+    cache_directory = input(
+        f"Cache directory [{current.get('cache_directory', '')}]: "
+    ).strip() or current.get("cache_directory", "")
+    return {"github_api_key": api_key, "cache_directory": cache_directory}
+
+
 def prompt_repo_input() -> tuple[str, str]:
     """Read the owner and name of a GitHub repository.
 

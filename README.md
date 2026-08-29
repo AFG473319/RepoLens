@@ -74,13 +74,13 @@ No package installation is needed beyond `pip install -r requirements.txt` — a
 
 ## Configuration
 
-Create a `.env` file in the project root to store your GitHub personal access token (see `.env.example`):
+Create a `.env` file in the project root to store your GitHub personal access token (see `.env.example`), or use the **Settings** option in the main menu:
 
 ```env
 GITHUB_API_KEY=ghp_your_token_here
 ```
 
-> **Note:** Using an API key is optional but recommended. Without it, unauthenticated requests are limited to 60 requests/hour. With a token, you get 5,000 requests/hour. The key is loaded lazily inside `analyze_repository()` via `python-dotenv`; the app runs fine without a `.env` file.
+> **Note:** Using an API key is optional but recommended. The Settings menu also lets you update the API key and cache directory without editing files. Settings are stored locally in `settings.json` (which is gitignored). Without it, unauthenticated requests are limited to 60 requests/hour. With a token, you get 5,000 requests/hour. The key is loaded lazily inside `analyze_repository()` via `python-dotenv`; the app runs fine without a `.env` file.
 
 ### Cache location override
 
@@ -191,7 +191,7 @@ RepoLens caches the full `analysis` + `scores` payload to avoid burning rate lim
 | **Clear** | The main menu's **Clear cache** option removes cache JSON files from all tracked directories and resets the registry; `clear_cache(owner, repo)` removes one repository's file from all tracked directories |
 | **Registry** | The project-local `cache_directories.json` records directory paths, not individual cache files |
 
-**Flow in `main.py:96-132`:**
+**Flow:**
 
 1. `cache.load_cache(owner, repo)` → `is_cache_valid()` + `is_cache_fresh()` → `cache.cache_age_string()` → `menu.prompt_cache_use()` (y/n loop)
 2. If cache accepted: `analysis, scores = cached_data["analysis"], cached_data["scores"]` and still prompt for `report_format`
@@ -248,8 +248,8 @@ Reports (`report.py`) always include `approximate` (bool) and `truncated_endpoin
 
 ```
 RepoLens/
-├── main.py            # analyze_repository() orchestration (dotenv + github → analyzer → scoring, approximate/truncated_endpoints) + main() loop (banner/menu, cache.load_cache → prompt_cache_use → fetch or reuse, print_summary, generate_*_report + save_report with PermissionError/IOError handling)
-├── menu.py            # All terminal I/O (only rich imports): print_banner (RichFiglet "AFG473319", larry3d), show_menu/get_user_choice, prompt_repo_input/prompt_report_format, confirm_exit, prompt_cache_use (fresh-cache y/n prompt)
+├── main.py            # analyze_repository() orchestration (dotenv + github → analyzer → scoring, approximate/truncated_endpoints) + main() loop (banner/menu, settings, cache, reports)
+├── menu.py            # Terminal I/O: banner, menus, settings, repository/report prompts, and confirmations
 ├── github.py          # REST client: _fetch (retry/rate-limit, Retry-After capped at 100s, exponential backoff), _paginate (Link-header, returns (items, truncated), MAX_PAGES=10/PER_PAGE=100), get_repo/get_commits/get_contributors/get_languages/get_issues; 409/204 handling
 ├── analyzer.py        # Pure payload transforms: analyze_repo/analyze_commits/analyze_contributors/analyze_languages/analyze_issues (filters pull_request keys)
 ├── scoring.py         # 3 dimensions averaged equally (1/3 each): calculate_activity_score (log10 commits + 10pt if latest commit within 90 days) / calculate_community_score / calculate_maintainability_score; calculate_health_score, grade_score (90/80/70/60 → A/B/C/D/F)

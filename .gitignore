@@ -30,6 +30,7 @@ Thumbs.db
 improvements.md
 .env
 *.env
+settings.json
 *_report.txt
 *_report.json
 .venv/

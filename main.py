@@ -9,6 +9,7 @@ import github
 import analyzer
 import scoring
 import report
+import settings
 
 
 def analyze_repository(owner: str, repo: str) -> tuple[dict, dict]:
@@ -81,12 +82,27 @@ def main() -> None:
     The menu remains active until the user confirms that the application
     should exit.
     """
+    dotenv.load_dotenv()
+    app_settings = settings.load_settings()
+    settings.apply_settings(app_settings)
+
     while True:
         menu.print_banner()
-        choices = ["Analyze a repository", "Clear cache", "Exit"]
+        choices = ["Analyze a repository", "Settings", "Clear cache", "Exit"]
         menu.show_menu(choices)
         user_choice = menu.get_user_choice(choices)
         
+        if user_choice == "Settings":
+            try:
+                updated_settings = menu.prompt_settings(app_settings)
+                settings.save_settings(updated_settings)
+                settings.apply_settings(updated_settings)
+                app_settings = updated_settings
+                print("Settings saved.")
+            except OSError as e:
+                print(f"Error: could not save settings: {e}")
+            continue
+
         if user_choice == "Clear cache":
             if menu.confirm_clear_cache():
                 try:
