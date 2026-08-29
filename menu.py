@@ -3,7 +3,11 @@ from rich_pyfiglet import RichFiglet
 
 
 def print_banner() -> None:
-    """Print the application banner to the console."""
+    """Render the application banner in the terminal.
+
+    Returns:
+        ``None``. The formatted banner is written directly to the console.
+    """
     console = Console()
     banner = RichFiglet(
         "AFG473319",
@@ -14,7 +18,7 @@ def print_banner() -> None:
 
 
 def show_menu(choices: list[str]) -> None:
-    """Display a numbered menu of choices.
+    """Display the available choices as a numbered menu.
 
     Args:
         choices: List of menu items to display.
@@ -24,7 +28,7 @@ def show_menu(choices: list[str]) -> None:
 
 
 def get_user_choice(choices: list[str]) -> str:
-    """Prompt the user for a menu selection.
+    """Read and return a valid selection from the numbered menu.
 
     Args:
         choices: The list of available choices.
@@ -44,10 +48,10 @@ def get_user_choice(choices: list[str]) -> str:
 
 
 def prompt_repo_input() -> tuple[str, str]:
-    """Prompt the user to enter a repository owner and name.
+    """Read the owner and name of a GitHub repository.
 
     Returns:
-        A tuple of (owner, repo) strings.
+        A tuple containing the owner and repository name.
     """
     owner = input("Enter the repository owner: ").strip()
     repo = input("Enter the repository name: ").strip()
@@ -55,36 +59,51 @@ def prompt_repo_input() -> tuple[str, str]:
 
 
 def prompt_report_format() -> str:
-    """Prompt the user to select a report format.
+    """Read the user's preferred report format.
 
     Returns:
-        Selected format as a string (e.g. 'text', 'json').
+        The selected format in lowercase.
     """
     formats = ["Text", "JSON"]
     show_menu(formats)
     return get_user_choice(formats).lower()
 
 
-def confirm_exit() -> bool:
-    """Ask the user to confirm program exit.
+def confirm_clear_cache() -> bool:
+    """Confirm whether all tracked cache files should be deleted.
 
     Returns:
-        True if the user confirms exit, False otherwise.
+        ``True`` when deletion is confirmed; otherwise ``False``.
+    """
+    while True:
+        answer = input("Clear all cached analyses? (y/n): ").strip().lower()
+        if answer in ("y", "yes"):
+            return True
+        if answer in ("n", "no"):
+            return False
+        print("Please enter 'y' or 'n'.")
+
+
+def confirm_exit() -> bool:
+    """Confirm whether the application should exit.
+
+    Returns:
+        ``True`` when exit is confirmed; otherwise ``False``.
     """
     user_input = input("Do you really want to exit?(y/n): ")
     return user_input.strip().lower() in ("y", "yes")
 
 
 def prompt_cache_use(owner: str, repo: str, age_str: str) -> bool:
-    """Ask whether to reuse a fresh cache instead of fetching.
+    """Ask whether to reuse a fresh cache instead of fetching new data.
 
     Args:
         owner: Repository owner.
         repo: Repository name.
-        age_str: Human-readable age, e.g. "5 hours ago".
+        age_str: Human-readable cache age for display.
 
     Returns:
-        True if the user wants to use the cache, False to refetch.
+        ``True`` when the cache should be reused; otherwise ``False``.
     """
     print(f"\nFound cached analysis for {owner}/{repo} from {age_str}.")
     print("The cache is recent (within 24h) and contains a complete analysis.")

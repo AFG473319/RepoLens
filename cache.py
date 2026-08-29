@@ -6,6 +6,7 @@ from pathlib import Path
 
 CACHE_TTL_SECONDS = 24 * 3600  # 24 hours - fresh enough for active repos, prompt lets user override
 CACHE_VERSION = 1
+REGISTRY_PATH = Path(__file__).resolve().parent / "cache_directories.json"
 
 # Anchor to repo root (file's parent) so `python main.py` from root works.
 # Allow override for tests / custom locations.
@@ -25,7 +26,14 @@ _SANITIZE_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 def _sanitize(name: str) -> str:
-    """Make owner/repo safe for filesystem (no ../ or slash)."""
+    """Sanitize a repository component for safe use in a filename.
+
+    Args:
+        name: Owner or repository name to sanitize.
+
+    Returns:
+        A filesystem-safe string limited to 100 characters.
+    """
     sanitized = _SANITIZE_RE.sub("_", name.strip())
     # prevent empty or dot-only
     if not sanitized or sanitized.strip("._") == "":
@@ -34,17 +42,132 @@ def _sanitize(name: str) -> str:
 
 
 def _cache_path(owner: str, repo: str, cache_dir: Path | None = None) -> Path:
+    """Build the cache-file path for a repository.
+
+    Args:
+        owner: GitHub username or organization that owns the repository.
+        repo: Repository name.
+        cache_dir: Directory in which to place the cache file. Defaults to
+            the configured cache directory.
+
+    Returns:
+        The path to the repository's cache file.
+    """
     directory = cache_dir if cache_dir is not None else CACHE_DIR
     filename = f"{_sanitize(owner)}_{_sanitize(repo)}.json"
     return directory / filename
 
 
+def _directory_key(directory: Path) -> str:
+    """Return the normalized absolute path used to identify a cache directory.
+
+    Args:
+        directory: Cache directory to normalize.
+
+    Returns:
+        The directory's normalized absolute path as a string.
+    """
+    return str(directory.expanduser().resolve())
+
+
+def _load_cache_directories() -> list[Path]:
+    """Load unique cache directories from the registry.
+
+    Returns:
+        A list of valid, unique cache-directory paths. Missing, malformed,
+        or unreadable registries produce an empty list.
+    """
+    try:
+        with open(REGISTRY_PATH, "r", encoding="utf-8") as f:
+            entries = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        entries = []
+    if not isinstance(entries, list):
+        return []
+    directories = []
+    seen = set()
+    for entry in entries:
+        if isinstance(entry, str) and entry.strip():
+            directory = Path(entry)
+            key = _directory_key(directory)
+            if key not in seen:
+                seen.add(key)
+                directories.append(Path(key))
+    return directories
+
+
+def _save_cache_directories(directories: list[Path]) -> None:
+    """Persist cache directory paths to the registry atomically.
+
+    Args:
+        directories: Cache directories to record.
+
+    Raises:
+        OSError: If the registry cannot be written or replaced.
+    """
+    temporary = REGISTRY_PATH.with_suffix(".tmp")
+    try:
+        with open(temporary, "w", encoding="utf-8") as f:
+            json.dump([_directory_key(directory) for directory in directories], f, indent=2)
+        temporary.replace(REGISTRY_PATH)
+    except OSError:
+        try:
+            if temporary.exists():
+                temporary.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def _tracked_cache_directories() -> list[Path]:
+    """Return the active cache directory followed by registered directories.
+
+    Returns:
+        A deduplicated list of directories searched for cache files.
+    """
+    directories = [Path(CACHE_DIR)] + _load_cache_directories()
+    unique = []
+    seen = set()
+    for directory in directories:
+        key = _directory_key(directory)
+        if key not in seen:
+            seen.add(key)
+            unique.append(Path(key))
+    return unique
+
+
+def _record_cache_directory(directory: Path) -> None:
+    """Register a cache directory unless it is already recorded.
+
+    Args:
+        directory: Cache directory to add to the registry.
+
+    Raises:
+        OSError: If the registry cannot be updated.
+    """
+    directories = _load_cache_directories()
+    if _directory_key(directory) not in {_directory_key(item) for item in directories}:
+        _save_cache_directories(directories + [directory])
+
+
 def _now() -> datetime:
+    """Return the current timezone-aware UTC datetime.
+
+    Returns:
+        The current UTC time.
+    """
     return datetime.now(timezone.utc)
 
 
 def _parse_iso(date_str: str) -> datetime | None:
-    """Parse ISO-8601 from cache; returns aware datetime or None."""
+    """Parse a cache timestamp into a timezone-aware datetime.
+
+    Args:
+        date_str: ISO-8601 timestamp stored in a cache payload.
+
+    Returns:
+        The parsed datetime, or ``None`` when the value is invalid.
+    """
     if not isinstance(date_str, str):
         return None
     try:
@@ -58,11 +181,14 @@ def _parse_iso(date_str: str) -> datetime | None:
 
 
 def is_cache_valid(data: dict) -> bool:
-    """Check cache dict has everything needed to skip a fetch.
+    """Determine whether a cache payload contains all data required for reuse.
 
-    Must contain owner/repo, fetched_at, version, analysis and scores
-    with all required keys and correct types. This is the 'surely has
-    everything' check from the spec.
+    Args:
+        data: Cache payload to validate.
+
+    Returns:
+        ``True`` when the payload has the expected version, metadata, analysis,
+        scores, and value types; otherwise ``False``.
     """
     if not isinstance(data, dict):
         return False
@@ -97,7 +223,18 @@ def is_cache_valid(data: dict) -> bool:
 
 
 def is_cache_fresh(data: dict, ttl_seconds: int = CACHE_TTL_SECONDS, now: datetime | None = None) -> bool:
-    """True if fetched_at is within ttl_seconds of now."""
+    """Determine whether a cache payload falls within the configured TTL.
+
+    Args:
+        data: Cache payload containing the ``fetched_at`` timestamp.
+        ttl_seconds: Maximum permitted cache age in seconds.
+        now: Reference time for the comparison. Defaults to the current UTC
+            time.
+
+    Returns:
+        ``True`` when the cache is fresh or its timestamp is in the future;
+        otherwise ``False``.
+    """
     fetched_at = _parse_iso(data.get("fetched_at", "")) if isinstance(data.get("fetched_at"), str) else None
     if fetched_at is None:
         return False
@@ -112,7 +249,17 @@ def is_cache_fresh(data: dict, ttl_seconds: int = CACHE_TTL_SECONDS, now: dateti
 
 
 def cache_age_string(data: dict, now: datetime | None = None) -> str:
-    """Human-readable age like '5 hours ago'."""
+    """Format a cache payload's age for display in the interactive prompt.
+
+    Args:
+        data: Cache payload containing the ``fetched_at`` timestamp.
+        now: Reference time for the calculation. Defaults to the current UTC
+            time.
+
+    Returns:
+        A human-readable age string, or ``"unknown age"`` for an invalid
+        timestamp.
+    """
     fetched_at = _parse_iso(data.get("fetched_at", "")) if isinstance(data.get("fetched_at"), str) else None
     if fetched_at is None:
         return "unknown age"
@@ -137,23 +284,37 @@ def cache_age_string(data: dict, now: datetime | None = None) -> str:
 
 
 def load_cache(owner: str, repo: str, cache_dir: Path | None = None) -> dict | None:
-    """Load cached entry for owner/repo or None if missing/invalid JSON."""
-    path = _cache_path(owner, repo, cache_dir)
-    if not path.exists():
-        return None
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        # corrupt or unreadable -> treat as miss
-        return None
-    return data
+    """Load a repository cache from the requested or tracked directories.
+
+    Args:
+        owner: GitHub username or organization that owns the repository.
+        repo: Repository name.
+        cache_dir: Directory to search first. When omitted, the active and
+            registered directories are searched.
+
+    Returns:
+        The decoded cache payload, or ``None`` when no readable cache exists.
+    """
+    if cache_dir is not None:
+        directories = [cache_dir] + [directory for directory in _load_cache_directories()
+                                     if _directory_key(directory) != _directory_key(cache_dir)]
+    else:
+        directories = _tracked_cache_directories()
+    for directory in directories:
+        path = _cache_path(owner, repo, directory)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+    return None
 
 
 def save_cache(owner: str, repo: str, analysis: dict, scores: dict, cache_dir: Path | None = None, fetched_at: datetime | None = None) -> Path:
-    """Atomically save analysis+scores for owner/repo.
+    """Atomically persist an analysis and its scores for a repository.
 
-    Returns the path written. Creates cache_dir if needed.
+    Returns:
+        The path of the cache file that was written.
     """
     directory = cache_dir if cache_dir is not None else CACHE_DIR
     directory.mkdir(parents=True, exist_ok=True)
@@ -172,6 +333,11 @@ def save_cache(owner: str, repo: str, analysis: dict, scores: dict, cache_dir: P
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
         tmp.replace(path)
+        try:
+            _record_cache_directory(directory)
+        except OSError:
+            # Registry persistence must not make a successfully written cache unusable.
+            pass
     except OSError:
         # cleanup tmp on failure
         try:
@@ -184,12 +350,52 @@ def save_cache(owner: str, repo: str, analysis: dict, scores: dict, cache_dir: P
 
 
 def clear_cache(owner: str, repo: str, cache_dir: Path | None = None) -> bool:
-    """Remove cache file if it exists. Returns True if removed."""
-    path = _cache_path(owner, repo, cache_dir)
+    """Remove a repository cache file from the requested or tracked directories.
+
+    Args:
+        owner: GitHub username or organization that owns the repository.
+        repo: Repository name.
+        cache_dir: Directory to search exclusively. When omitted, all tracked
+            directories are searched.
+
+    Returns:
+        ``True`` when at least one cache file is removed; otherwise ``False``.
+    """
+    directories = [cache_dir] if cache_dir is not None else _tracked_cache_directories()
+    removed = False
+    for directory in directories:
+        try:
+            path = _cache_path(owner, repo, directory)
+            if path.exists():
+                path.unlink()
+                removed = True
+        except OSError:
+            continue
+    return removed
+
+
+def clear_all_cache() -> int:
+    """Delete tracked cache files and remove the cache-directory registry.
+
+    Returns:
+        The number of cache files successfully removed.
+    """
+    removed = 0
+    directories = _tracked_cache_directories()
+    for directory in directories:
+        try:
+            if directory.exists():
+                for path in directory.glob("*.json"):
+                    try:
+                        path.unlink()
+                        removed += 1
+                    except OSError:
+                        pass
+        except OSError:
+            pass
     try:
-        if path.exists():
-            path.unlink()
-            return True
+        if REGISTRY_PATH.exists():
+            REGISTRY_PATH.unlink()
     except OSError:
         pass
-    return False
+    return removed

@@ -12,14 +12,14 @@ import report
 
 
 def analyze_repository(owner: str, repo: str) -> tuple[dict, dict]:
-    """Fetch and analyze a repository.
+    """Fetch repository data and return its analysis and scores.
 
     Args:
         owner: GitHub username or organization.
         repo: Repository name.
 
     Returns:
-        A tuple of (analysis_dict, scores_dict)
+        A tuple containing the analysis payload and calculated scores.
     """
     dotenv.load_dotenv()
     api_key = os.getenv("GITHUB_API_KEY")
@@ -43,8 +43,8 @@ def analyze_repository(owner: str, repo: str) -> tuple[dict, dict]:
         "issues": analyzer.analyze_issues(issues_data)
     }
 
-    # Only list-based endpoints are paginated (and thus can be
-    # truncated); languages and repo metadata return a single payload.
+    # Only list endpoints are paginated; repository metadata and languages
+    # are returned as single payloads.
     truncated_endpoints = [
         name
         for name, truncated in (
@@ -76,13 +76,28 @@ def analyze_repository(owner: str, repo: str) -> tuple[dict, dict]:
 
 
 def main() -> None:
-    """Main entry point for the application."""
+    """Run the interactive RepoLens command-line application.
+
+    The menu remains active until the user confirms that the application
+    should exit.
+    """
     while True:
         menu.print_banner()
-        choices = ["Analyze a repository", "Exit"]
+        choices = ["Analyze a repository", "Clear cache", "Exit"]
         menu.show_menu(choices)
         user_choice = menu.get_user_choice(choices)
         
+        if user_choice == "Clear cache":
+            if menu.confirm_clear_cache():
+                try:
+                    removed = cache.clear_all_cache()
+                    print(f"Cleared {removed} cache file{'s' if removed != 1 else ''}.")
+                except OSError as e:
+                    print(f"Error: could not clear cache: {e}")
+            else:
+                print("Cache clear cancelled.")
+            continue
+
         if user_choice == "Exit":
             if menu.confirm_exit():
                 print("Goodbye!")
@@ -93,7 +108,7 @@ def main() -> None:
             try:
                 owner, repo = menu.prompt_repo_input()
 
-                # --- Cache check: if we have a fresh, complete cache, offer to reuse ---
+                # Offer a fresh, complete cache before fetching from GitHub.
                 cached_data = cache.load_cache(owner, repo)
                 use_cache = False
                 if cached_data is not None and cache.is_cache_valid(cached_data) and cache.is_cache_fresh(cached_data):
@@ -109,8 +124,8 @@ def main() -> None:
                     print("\nFetching data from GitHub...")
                     analysis, scores = analyze_repository(owner, repo)
 
-                    # Save fresh result to cache (every turn, even if cache was stale/invalid)
-                    # Guard: only cache complete payloads (prevents test mocks with incomplete dicts from polluting)
+                    # Cache only complete payloads; incomplete results should not
+                    # replace a usable cache entry.
                     _probe = {
                         "version": cache.CACHE_VERSION,
                         "owner": owner,

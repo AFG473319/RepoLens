@@ -186,9 +186,10 @@ RepoLens caches the full `analysis` + `scores` payload to avoid burning rate lim
 | **Validation** | `is_cache_valid()` checks `version`/`owner`/`repo`/`fetched_at` + presence of all required `analysis` keys (`repo`, `commits`, `contributors`, `languages`, `issues`, `approximate`, `truncated_endpoints`) and `scores` keys (`health_score`, `activity_score`, `community_score`, `maintainability_score`, `grade`) with type sanity |
 | **Age display** | `cache_age_string()` → `"42s ago"`, `"3 minutes ago"`, `"5 hours ago"`, `"2 days ago"`, or `"on 2026-08-26 14:03 UTC"` |
 | **Atomic save** | `save_cache()` writes to `*.tmp` then `replace()`; cleans up on `OSError` |
-| **Load behavior** | `load_cache()` returns `None` on miss or corrupt/unreadable JSON |
-| **Override** | `REPOLENS_CACHE_DIR` env var (see Configuration) |
-| **Clear** | `clear_cache(owner, repo)` removes the file if present |
+| **Load behavior** | `load_cache()` searches the active directory and every directory registered in `cache_directories.json`; missing or unreadable files are treated as cache misses |
+| **Override** | `REPOLENS_CACHE_DIR` sets the active directory (see Configuration); successful saves register that directory for later cleanup |
+| **Clear** | The main menu's **Clear cache** option removes cache JSON files from all tracked directories and resets the registry; `clear_cache(owner, repo)` removes one repository's file from all tracked directories |
+| **Registry** | The project-local `cache_directories.json` records directory paths, not individual cache files |
 
 **Flow in `main.py:96-132`:**
 
@@ -253,7 +254,8 @@ RepoLens/
 ├── analyzer.py        # Pure payload transforms: analyze_repo/analyze_commits/analyze_contributors/analyze_languages/analyze_issues (filters pull_request keys)
 ├── scoring.py         # 3 dimensions averaged equally (1/3 each): calculate_activity_score (log10 commits + 10pt if latest commit within 90 days) / calculate_community_score / calculate_maintainability_score; calculate_health_score, grade_score (90/80/70/60 → A/B/C/D/F)
 ├── report.py          # generate_text_report/generate_json_report (both surface approximate/truncated_endpoints), save_report, print_summary (warns when approximate)
-├── cache.py           # Filesystem cache in .repolens_cache/ (CACHE_VERSION=1, TTL 24h): _sanitize/_cache_path, is_cache_valid (version/owner/repo/fetched_at + required keys), is_cache_fresh/cache_age_string, load_cache/save_cache (atomic *.tmp replace)/clear_cache; CACHE_DIR respects REPOLENS_CACHE_DIR
+├── cache.py            # Filesystem cache, tracked-directory loading, and cache cleanup; CACHE_DIR respects REPOLENS_CACHE_DIR
+├── cache_directories.json # Visible registry of cache directories used since the last cleanup (created at runtime)
 ├── tests/             # Unit tests (unittest, mocked)
 │   ├── test_analyzer.py
 │   ├── test_github.py
