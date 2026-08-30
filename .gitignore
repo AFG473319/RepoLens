@@ -45,3 +45,4 @@ _write_features.py
 feature_ideas.md
 .repolens_cache/
 .repolens/
+cache_directories.json
