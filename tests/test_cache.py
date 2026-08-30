@@ -13,7 +13,7 @@ class TestCache(unittest.TestCase):
 
     def test_cache_path_uses_configured_directory(self):
         path = cache._cache_path("owner", "repo", Path("cache"))
-        self.assertEqual(path, Path("cache/owner_repo.json"))
+        self.assertEqual(path, Path("cache/owner_repo_repolens_cache.json"))
 
     def test_valid_payload(self):
         payload = self._payload()
@@ -38,7 +38,7 @@ class TestCache(unittest.TestCase):
     def test_load_cache_ignores_invalid_json(self):
         with tempfile.TemporaryDirectory() as directory:
             cache_dir = Path(directory)
-            (cache_dir / "owner_repo.json").write_text("invalid", encoding="utf-8")
+            (cache_dir / "owner_repo_repolens_cache.json").write_text("invalid", encoding="utf-8")
             self.assertIsNone(cache.load_cache("owner", "repo", cache_dir=cache_dir))
 
     def test_save_and_load_cache(self):
@@ -50,13 +50,25 @@ class TestCache(unittest.TestCase):
             self.assertEqual(loaded["owner"], "owner")
             self.assertEqual(loaded["analysis"], self._analysis())
 
-    def test_clear_all_cache_removes_json_files(self):
+    def test_clear_all_cache_removes_cache_files(self):
         with tempfile.TemporaryDirectory() as directory:
             cache_dir = Path(directory)
-            (cache_dir / "one.json").write_text("{}", encoding="utf-8")
+            (cache_dir / "one_repolens_cache.json").write_text("{}", encoding="utf-8")
             with patch.object(cache, "CACHE_DIR", cache_dir), patch.object(cache, "REGISTRY_PATH", cache_dir / "registry.json"):
                 self.assertEqual(cache.clear_all_cache(), 1)
-            self.assertFalse((cache_dir / "one.json").exists())
+            self.assertFalse((cache_dir / "one_repolens_cache.json").exists())
+
+    def test_clear_all_cache_never_touches_foreign_json(self):
+        """Regression for B1: clear must not delete arbitrary *.json in the cache directory."""
+        with tempfile.TemporaryDirectory() as directory:
+            cache_dir = Path(directory)
+            (cache_dir / "settings.json").write_text("{}", encoding="utf-8")
+            (cache_dir / "package.json").write_text("{}", encoding="utf-8")
+            (cache_dir / "owner_repo_repolens_cache.json").write_text("{}", encoding="utf-8")
+            with patch.object(cache, "CACHE_DIR", cache_dir), patch.object(cache, "REGISTRY_PATH", cache_dir / "registry.json"):
+                self.assertEqual(cache.clear_all_cache(), 1)
+            self.assertTrue((cache_dir / "settings.json").exists())
+            self.assertTrue((cache_dir / "package.json").exists())
 
     @staticmethod
     def _analysis():

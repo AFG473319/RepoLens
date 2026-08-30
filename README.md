@@ -119,7 +119,7 @@ python main.py
    The cache is recent (within 24h) and contains a complete analysis.
    Use cached data? (y = use cache, n = fetch fresh) [y/n]:
    ```
-   - `y` → skips all GitHub fetches and reuses `analysis` + `scores` from `.repolens_cache/{owner}_{repo}.json`
+   - `y` → skips all GitHub fetches and reuses `analysis` + `scores` from `.repolens_cache/{owner}_{repo}_repolens_cache.json`
    - `n` → fetches fresh data and overwrites the cache atomically
 4. If fetching, select a report format: `Text` or `JSON`
 5. View the summary in the terminal — when pagination was capped a warning is printed:
@@ -179,7 +179,7 @@ RepoLens caches the full `analysis` + `scores` payload to avoid burning rate lim
 
 | Property | Detail |
 |----------|--------|
-| **Location** | `.repolens_cache/{owner}_{repo}.json` (sanitized via `[^A-Za-z0-9._-]` → `_`, 100-char cap) |
+| **Location** | `.repolens_cache/{owner}_{repo}_repolens_cache.json` (sanitized via `[^A-Za-z0-9._-]` → `_`, 100-char cap) |
 | **Version** | `CACHE_VERSION=1` — mismatched versions are treated as invalid |
 | **TTL** | `CACHE_TTL_SECONDS=24*3600` (24 h) |
 | **Freshness** | `is_cache_fresh()` compares `fetched_at` (ISO-8601, timezone-aware) to now; future timestamps count as fresh (clock skew) |
@@ -188,7 +188,7 @@ RepoLens caches the full `analysis` + `scores` payload to avoid burning rate lim
 | **Atomic save** | `save_cache()` writes to `*.tmp` then `replace()`; cleans up on `OSError` |
 | **Load behavior** | `load_cache()` searches the active directory and every directory registered in `cache_directories.json`; missing or unreadable files are treated as cache misses |
 | **Override** | `REPOLENS_CACHE_DIR` sets the active directory (see Configuration); successful saves register that directory for later cleanup |
-| **Clear** | The main menu's **Clear cache** option removes cache JSON files from all tracked directories and resets the registry; `clear_cache(owner, repo)` removes one repository's file from all tracked directories |
+| **Clear** | The main menu's **Clear cache** option removes only `*_repolens_cache.json` files from all tracked directories and resets the registry — unrelated `*.json` in the cache directory are never touched; `clear_cache(owner, repo)` removes one repository's file from all tracked directories |
 | **Registry** | The project-local `cache_directories.json` records directory paths, not individual cache files |
 
 **Flow:**
@@ -263,7 +263,7 @@ RepoLens/
 │   ├── test_menu.py
 │   ├── test_report.py
 │   └── test_scoring.py
-├── .repolens_cache/   # Active cache dir (gitignored) — {owner}_{repo}.json with fetched_at ISO timestamps
+├── .repolens_cache/   # Active cache dir (gitignored) — {owner}_{repo}_repolens_cache.json with fetched_at ISO timestamps
 ├── .env               # Optional: GITHUB_API_KEY (gitignored, loaded lazily in analyze_repository())
 ├── .env.example       # Template for .env
 ├── requirements.txt   # Python dependencies

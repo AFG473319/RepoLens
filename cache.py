@@ -6,6 +6,10 @@ from pathlib import Path
 
 CACHE_TTL_SECONDS = 24 * 3600  # 24 hours - fresh enough for active repos, prompt lets user override
 CACHE_VERSION = 1
+# Cache files are named <owner>_<repo>_repolens_cache.json so that cache
+# cleanup can match only files this tool created — the cache directory is
+# user-settable and may contain unrelated *.json that must never be deleted.
+CACHE_SUFFIX = "_repolens_cache.json"
 REGISTRY_PATH = Path(__file__).resolve().parent / "cache_directories.json"
 
 # Anchor to repo root (file's parent) so `python main.py` from root works.
@@ -54,7 +58,7 @@ def _cache_path(owner: str, repo: str, cache_dir: Path | None = None) -> Path:
         The path to the repository's cache file.
     """
     directory = cache_dir if cache_dir is not None else CACHE_DIR
-    filename = f"{_sanitize(owner)}_{_sanitize(repo)}.json"
+    filename = f"{_sanitize(owner)}_{_sanitize(repo)}{CACHE_SUFFIX}"
     return directory / filename
 
 
@@ -385,7 +389,7 @@ def clear_all_cache() -> int:
     for directory in directories:
         try:
             if directory.exists():
-                for path in directory.glob("*.json"):
+                for path in directory.glob(f"*{CACHE_SUFFIX}"):
                     try:
                         path.unlink()
                         removed += 1
