@@ -167,6 +167,9 @@ def main() -> None:
                 if report_format.lower() == "json":
                     report_content = report.generate_json_report(analysis, scores)
                     filename = f"{owner}_{repo}_report.json"
+                elif report_format.lower() == "html":
+                    report_content = report.generate_html_report(analysis, scores)
+                    filename = f"{owner}_{repo}_report.html"
                 else:
                     report_content = report.generate_text_report(analysis, scores)
                     filename = f"{owner}_{repo}_report.txt"

@@ -34,7 +34,7 @@ RepoLens fetches repository data from the GitHub API, analyzes key metrics acros
 - **Repository Analysis** — Fetch metadata, commits, contributors, languages, and issues via the GitHub REST API
 - **Multi-dimensional Scoring** — Calculate health, activity, community, and maintainability scores (0–100)
 - **Letter Grading** — Convert numeric scores to intuitive letter grades (A–F)
-- **Report Export** — Save reports as formatted `.txt` or structured `.json` (both surface `approximate` / `truncated_endpoints` when pagination was capped)
+- **Report Export** — Save reports as formatted `.txt`, structured `.json`, or a self-contained interactive `.html` with score bars, grade rulers, filtering, theme toggle, and keyboard shortcuts (all formats surface `approximate` / `truncated_endpoints` when pagination was capped)
 - **Interactive CLI** — User-friendly terminal interface with menus, confirmation prompts, and `rich`/`RichFiglet` banner
 - **Filesystem Cache** — Local `.repolens_cache/` with 24 h TTL, atomic writes, and versioned validation — reuses fresh results and skips the GitHub fetch when you confirm
 - **Pagination with Truncation Awareness** — Follows `Link: rel="next"` headers up to `MAX_PAGES=10` (`PER_PAGE=100`, 1 000 items cap); warns when counts are approximate lower bounds
@@ -121,7 +121,7 @@ python main.py
    ```
    - `y` → skips all GitHub fetches and reuses `analysis` + `scores` from `.repolens_cache/{owner}_{repo}_repolens_cache.json`
    - `n` → fetches fresh data and overwrites the cache atomically
-4. If fetching, select a report format: `Text` or `JSON`
+4. If fetching, select a report format: `Text`, `JSON`, or `HTML`
 5. View the summary in the terminal — when pagination was capped a warning is printed:
    ```
    Warning: counts are approximate because one or more GitHub endpoints returned more than 1000 results.
@@ -130,6 +130,7 @@ python main.py
 6. The report file is saved to the current directory:
    - `{owner}_{repo}_report.txt`
    - `{owner}_{repo}_report.json`
+   - `{owner}_{repo}_report.html`
 
 ### Example Output
 
@@ -253,7 +254,7 @@ RepoLens/
 ├── github.py          # REST client: _fetch (retry/rate-limit, Retry-After capped at 100s, exponential backoff), _paginate (Link-header, returns (items, truncated), MAX_PAGES=10/PER_PAGE=100), get_repo/get_commits/get_contributors/get_languages/get_issues; 409/204 handling
 ├── analyzer.py        # Pure payload transforms: analyze_repo/analyze_commits/analyze_contributors/analyze_languages/analyze_issues (filters pull_request keys)
 ├── scoring.py         # 3 dimensions averaged equally (1/3 each): calculate_activity_score (log10 commits + 10pt if latest commit within 90 days) / calculate_community_score / calculate_maintainability_score; calculate_health_score, grade_score (90/80/70/60 → A/B/C/D/F)
-├── report.py          # generate_text_report/generate_json_report (both surface approximate/truncated_endpoints), save_report, print_summary (warns when approximate)
+├── report.py          # generate_text_report/generate_json_report/generate_html_report (all surface approximate/truncated_endpoints), save_report, print_summary (warns when approximate)
 ├── cache.py            # Filesystem cache, tracked-directory loading, and cache cleanup; CACHE_DIR respects REPOLENS_CACHE_DIR
 ├── cache_directories.json # Visible registry of cache directories used since the last cleanup (created at runtime)
 ├── tests/             # Unit tests (unittest, mocked)
@@ -272,7 +273,7 @@ RepoLens/
 └── README.md
 ```
 
-Generated reports (`{owner}_{repo}_report.{txt,json,md,html,csv}`) and scratch files (`improvements.md`, `implementation_plan.md`, `_write_features.py`, `feature_ideas.md`, `AGENTS.md`, `.zcode/`) are gitignored.
+Generated reports (`{owner}_{repo}_report.{txt,json,md,html,csv}`) and scratch files (`improvements.md`, `implementation_plan.md`, `_write_features.py`, `feature_ideas.md`, `AGENTS.md`, `.zcode/`) are gitignored. The HTML report is a single self-contained file — inline CSS/JS, no external requests — so it renders identically offline and prints cleanly.
 
 ---
 

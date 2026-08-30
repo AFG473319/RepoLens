@@ -328,6 +328,28 @@ class TestMain(unittest.TestCase):
     @patch("main.menu")
     @patch("main.analyze_repository")
     @patch("main.report")
+    def test_main_html_report_flow(self, mock_report, mock_analyze, mock_menu):
+        mock_menu.get_user_choice.side_effect = ["Analyze a repository", "Exit"]
+        mock_menu.prompt_repo_input.return_value = ("owner", "repo")
+        mock_menu.prompt_report_format.return_value = "html"
+        mock_menu.confirm_exit.return_value = True
+        mock_analyze.return_value = (ANALYSIS_DICT, SCORES_DICT)
+        mock_report.generate_html_report.return_value = "<!DOCTYPE html>"
+
+        with patch("builtins.print"):
+            with patch("builtins.input", return_value=""):
+                main.main()
+
+        mock_report.generate_html_report.assert_called_once_with(ANALYSIS_DICT, SCORES_DICT)
+        mock_report.generate_text_report.assert_not_called()
+        mock_report.generate_json_report.assert_not_called()
+        mock_report.save_report.assert_called_once_with(
+            "<!DOCTYPE html>", "owner_repo_report.html"
+        )
+
+    @patch("main.menu")
+    @patch("main.analyze_repository")
+    @patch("main.report")
     def test_main_text_report_filename(self, mock_report, mock_analyze, mock_menu):
         mock_menu.get_user_choice.side_effect = ["Analyze a repository", "Exit"]
         mock_menu.prompt_repo_input.return_value = ("owner", "repo")

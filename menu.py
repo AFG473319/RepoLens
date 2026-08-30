@@ -78,7 +78,7 @@ def prompt_report_format() -> str:
     Returns:
         The selected format in lowercase.
     """
-    formats = ["Text", "JSON"]
+    formats = ["Text", "JSON", "HTML"]
     show_menu(formats)
     return get_user_choice(formats).lower()
 

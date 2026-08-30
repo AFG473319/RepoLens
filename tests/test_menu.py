@@ -183,7 +183,7 @@ class TestPromptReportFormat(unittest.TestCase):
         result = prompt_report_format()
 
         self.assertEqual(result, "json")
-        mock_show_menu.assert_called_once_with(["Text", "JSON"])
+        mock_show_menu.assert_called_once_with(["Text", "JSON", "HTML"])
         mock_input.assert_called_once()
 
     @patch("builtins.input", return_value="1")
@@ -192,10 +192,18 @@ class TestPromptReportFormat(unittest.TestCase):
         result = prompt_report_format()
 
         self.assertEqual(result, "text")
-        mock_show_menu.assert_called_once_with(["Text", "JSON"])
+        mock_show_menu.assert_called_once_with(["Text", "JSON", "HTML"])
+
+    @patch("builtins.input", return_value="3")
+    @patch("menu.show_menu")
+    def test_prompt_report_format_html(self, mock_show_menu, mock_input):
+        result = prompt_report_format()
+
+        self.assertEqual(result, "html")
+        mock_show_menu.assert_called_once_with(["Text", "JSON", "HTML"])
 
     @patch("builtins.print")
-    @patch("builtins.input", side_effect=["3", "1"])
+    @patch("builtins.input", side_effect=["4", "1"])
     @patch("menu.show_menu")
     def test_prompt_report_format_invalid_then_valid(
         self, mock_show_menu, mock_input, mock_print

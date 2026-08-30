@@ -8,6 +8,7 @@ import github
 from report import (
     generate_text_report,
     generate_json_report,
+    generate_html_report,
     save_report,
     print_summary,
 )
@@ -138,6 +139,181 @@ class TestGenerateTextReport(unittest.TestCase):
         self.assertIn("  Top contributor: N/A", result)
         self.assertIn("  Primary language: Unknown", result)
         self.assertIn("  Grade: N/A", result)
+
+
+class TestGenerateHtmlReport(unittest.TestCase):
+    def _analysis(self):
+        return {
+            "repo": {"name": "flask", "description": "A micro framework", "stars": 69500, "forks": 13200, "language": "Python"},
+            "commits": {"total_commits": 8500, "unique_contributors": 412, "latest_commit_date": "2026-08-27"},
+            "contributors": {"total_contributors": 843, "top_contributor": "mitsuhiko", "most_contributions": 1204},
+            "languages": {"primary_language": "Python", "language_count": 7},
+            "issues": {"total_issues": 1000, "open_issues": 213, "closed_issues": 787},
+        }
+
+    def _scores(self):
+        return {
+            "health_score": 92.5,
+            "activity_score": 95.0,
+            "community_score": 96.7,
+            "maintainability_score": 85.9,
+            "grade": "A",
+        }
+
+    def _assert_no_none(self, result):
+        # None must never leak into the rendered page (not even inside
+        # escaped text, which would show as the literal string "None")
+        self.assertNotIn("None", result.replace("<!-- None", ""))
+
+    def test_returns_complete_html_document(self):
+        result = generate_html_report(self._analysis(), self._scores())
+
+        self.assertIsInstance(result, str)
+        self.assertIn("<!DOCTYPE html>", result)
+        self.assertIn("<html", result)
+        self.assertIn("</html>", result)
+        self.assertIn("<title>", result)
+
+    def test_contains_hero_and_all_data(self):
+        result = generate_html_report(self._analysis(), self._scores())
+
+        self.assertIn("flask", result)
+        self.assertIn("A micro framework", result)
+        self.assertIn("69,500", result)
+        self.assertIn("13,200", result)
+        self.assertIn("843", result)
+        self.assertIn("mitsuhiko", result)
+        self.assertIn("1,204", result)
+        self.assertIn("2026-08-27", result)
+        self.assertIn("92.5", result)
+        self.assertIn("95.0", result)
+        self.assertIn("96.7", result)
+        self.assertIn("85.9", result)
+        self.assertIn(">A</span>", result)
+
+    def test_section_headings_present(self):
+        result = generate_html_report(self._analysis(), self._scores())
+
+        self.assertIn("scores", result)
+        self.assertIn("metrics", result)
+        self.assertIn("data &amp; limitations", result)
+
+    def test_approximate_note_when_truncated(self):
+        analysis = self._analysis()
+        analysis["approximate"] = True
+        analysis["truncated_endpoints"] = ["commits", "issues"]
+
+        result = generate_html_report(analysis, self._scores())
+
+        self.assertIn("approximate", result)
+        self.assertIn(f"more than {github.MAX_PAGES * github.PER_PAGE:,} results", result)
+        self.assertIn("commits, issues", result)
+
+    def test_no_limitations_when_not_truncated(self):
+        analysis = self._analysis()
+        analysis["approximate"] = False
+        analysis["truncated_endpoints"] = []
+
+        result = generate_html_report(analysis, self._scores())
+
+        self.assertIn("No pagination truncation", result)
+
+    def test_escapes_repo_sourced_strings(self):
+        analysis = self._analysis()
+        analysis["repo"]["name"] = 'flask"><script>alert(1)</script>'
+        analysis["repo"]["description"] = "desc & <b>bold</b> \"quoted\""
+
+        result = generate_html_report(analysis, self._scores())
+
+        self.assertNotIn("<script>alert(1)</script>", result)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", result)
+        self.assertIn("desc &amp; &lt;b&gt;bold&lt;/b&gt; &quot;quoted&quot;", result)
+        self._assert_no_none(result)
+
+    def test_escapes_truncated_endpoint_names(self):
+        analysis = self._analysis()
+        analysis["approximate"] = True
+        analysis["truncated_endpoints"] = ['<script>x</script>']
+
+        result = generate_html_report(analysis, self._scores())
+
+        self.assertNotIn("<script>x</script>", result)
+
+    def test_handles_empty_analysis_and_scores(self):
+        result = generate_html_report({}, {})
+
+        self.assertIn("<!DOCTYPE html>", result)
+        self._assert_no_none(result)
+        self.assertIn("0", result)
+
+    def test_handles_missing_sub_dicts(self):
+        analysis = {"approximate": False}
+        result = generate_html_report(analysis, {})
+
+        self.assertIn("<!DOCTYPE html>", result)
+        self._assert_no_none(result)
+
+    def test_none_values_render_placeholders(self):
+        # analyzer emits explicit None for null GitHub fields
+        analysis = {
+            "repo": {"name": None, "description": None, "stars": None, "forks": None, "language": None},
+            "commits": {"total_commits": 0, "unique_contributors": 0, "latest_commit_date": None},
+            "contributors": {"total_contributors": 0, "top_contributor": None, "most_contributions": 0},
+            "languages": {"primary_language": None, "language_count": 0},
+            "issues": {"total_issues": 0, "open_issues": 0, "closed_issues": 0},
+        }
+        result = generate_html_report(analysis, {})
+
+        self.assertIn("No description", result)
+        self.assertIn("N/A", result)
+        self.assertIn("Unknown", result)
+        self._assert_no_none(result)
+
+    def test_scores_clamped_to_zero_hundred(self):
+        analysis = self._analysis()
+        scores = {"health_score": 142.0, "activity_score": -7.0, "community_score": 50.0, "maintainability_score": 100.0, "grade": "A"}
+        result = generate_html_report(analysis, scores)
+
+        # bars carry width via the --w custom property; clamped to 0-100
+        self.assertNotIn("--w: 142%", result)
+        self.assertNotIn("--w: -7%", result)
+        self.assertIn("--w: 100%", result)
+        self.assertIn("--w: 0%", result)
+
+    def test_non_numeric_scores_render_zero_width(self):
+        analysis = self._analysis()
+        scores = {"health_score": None, "activity_score": "high", "community_score": 50.0, "maintainability_score": 80.0, "grade": "B"}
+        result = generate_html_report(analysis, scores)
+
+        self.assertNotIn("--w: None%", result)
+        self.assertNotIn("--w: high%", result)
+        self.assertIn("--w: 0%", result)
+
+    def test_unknown_grade_gets_neutral_style(self):
+        analysis = self._analysis()
+        scores = self._scores()
+        scores["grade"] = "X"
+        result = generate_html_report(analysis, scores)
+
+        self.assertIn("g-Neutral", result)
+
+    def test_missing_grade_gets_neutral_style(self):
+        result = generate_html_report(self._analysis(), {"health_score": 50.0})
+        self.assertIn("g-Neutral", result)
+
+    def test_unicode_survives(self):
+        analysis = self._analysis()
+        analysis["repo"]["name"] = "プロジェクト-ünïcodé"
+        analysis["repo"]["description"] = "Résumé — 中文说明 🎉"
+        result = generate_html_report(analysis, self._scores())
+
+        self.assertIn("プロジェクト-ünïcodé", result)
+        self.assertIn("Résumé — 中文说明", result)
+
+    def test_thousands_separators_on_counts(self):
+        result = generate_html_report(self._analysis(), self._scores())
+        self.assertIn("69,500", result)
+        self.assertIn("8,500", result)
 
 
 class TestGenerateJsonReport(unittest.TestCase):
