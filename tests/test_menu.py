@@ -7,6 +7,7 @@ from menu import (
     get_user_choice,
     prompt_repo_input,
     prompt_report_format,
+    prompt_settings,
     confirm_exit,
 )
 
@@ -177,41 +178,102 @@ class TestPromptRepoInput(unittest.TestCase):
 
 
 class TestPromptReportFormat(unittest.TestCase):
-    @patch("builtins.input", return_value="2")
-    @patch("menu.show_menu")
-    def test_prompt_report_format_returns_string(self, mock_show_menu, mock_input):
-        result = prompt_report_format()
-
-        self.assertEqual(result, "json")
-        mock_show_menu.assert_called_once_with(["Text", "JSON", "HTML"])
-        mock_input.assert_called_once()
-
-    @patch("builtins.input", return_value="1")
-    @patch("menu.show_menu")
-    def test_prompt_report_format_text(self, mock_show_menu, mock_input):
-        result = prompt_report_format()
-
-        self.assertEqual(result, "text")
-        mock_show_menu.assert_called_once_with(["Text", "JSON", "HTML"])
-
-    @patch("builtins.input", return_value="3")
-    @patch("menu.show_menu")
-    def test_prompt_report_format_html(self, mock_show_menu, mock_input):
-        result = prompt_report_format()
+    @patch("builtins.input", return_value="")
+    def test_prompt_report_format_enter_returns_default(self, mock_input):
+        result = prompt_report_format("html")
 
         self.assertEqual(result, "html")
-        mock_show_menu.assert_called_once_with(["Text", "JSON", "HTML"])
+        mock_input.assert_called_once()
+
+    @patch("builtins.input", return_value="")
+    def test_prompt_report_format_enter_returns_json_default(self, mock_input):
+        result = prompt_report_format("json")
+
+        self.assertEqual(result, "json")
 
     @patch("builtins.print")
-    @patch("builtins.input", side_effect=["4", "1"])
-    @patch("menu.show_menu")
-    def test_prompt_report_format_invalid_then_valid(
-        self, mock_show_menu, mock_input, mock_print
-    ):
-        result = prompt_report_format()
+    @patch("builtins.input", side_effect=["2", "json"])
+    def test_prompt_report_format_rejects_number(self, mock_input, mock_print):
+        result = prompt_report_format("html")
+
+        self.assertEqual(result, "json")
+        self.assertEqual(mock_input.call_count, 2)
+        self.assertTrue(mock_print.called)
+
+    @patch("builtins.input", return_value="JSON")
+    def test_prompt_report_format_name_case_insensitive(self, mock_input):
+        result = prompt_report_format("html")
+
+        self.assertEqual(result, "json")
+
+    @patch("builtins.input", return_value="  Text  ")
+    def test_prompt_report_format_name_strips_whitespace(self, mock_input):
+        result = prompt_report_format("html")
 
         self.assertEqual(result, "text")
+
+    @patch("builtins.print")
+    @patch("builtins.input", side_effect=["pdf", "html"])
+    def test_prompt_report_format_invalid_then_valid(self, mock_input, mock_print):
+        result = prompt_report_format("json")
+
+        self.assertEqual(result, "html")
         self.assertEqual(mock_input.call_count, 2)
+        self.assertTrue(mock_print.called)
+
+    @patch("builtins.print")
+    @patch("builtins.input", return_value="")
+    def test_prompt_report_format_shows_default_in_prompt(self, mock_input, mock_print):
+        prompt_report_format("json")
+
+        prompt_text = mock_input.call_args[0][0]
+        self.assertIn("json", prompt_text)
+
+
+class TestPromptSettings(unittest.TestCase):
+    @patch("builtins.input", side_effect=["", "", "json", ""])
+    def test_prompt_settings_updates_format(self, mock_input):
+        current = {"github_api_key": "key", "cache_directory": "cache", "default_report_format": "html"}
+
+        updated = prompt_settings(current)
+
+        self.assertEqual(updated["default_report_format"], "json")
+
+    @patch("builtins.input", side_effect=["", "", "", ""])
+    def test_prompt_settings_enter_keeps_current_format(self, mock_input):
+        current = {"github_api_key": "key", "cache_directory": "cache", "default_report_format": "json"}
+
+        updated = prompt_settings(current)
+
+        self.assertEqual(updated["default_report_format"], "json")
+
+    @patch("builtins.print")
+    @patch("builtins.input", side_effect=["", "", "pdf", "text", ""])
+    def test_prompt_settings_invalid_format_reprompts(self, mock_input, mock_print):
+        current = {"github_api_key": "key", "cache_directory": "cache", "default_report_format": "html"}
+
+        updated = prompt_settings(current)
+
+        self.assertEqual(updated["default_report_format"], "text")
+        self.assertEqual(mock_input.call_count, 4)
+        self.assertTrue(mock_print.called)
+
+    @patch("builtins.input", side_effect=["", "", "HTML", ""])
+    def test_prompt_settings_normalizes_format_case(self, mock_input):
+        current = {"github_api_key": "key", "cache_directory": "cache", "default_report_format": "html"}
+
+        updated = prompt_settings(current)
+
+        self.assertEqual(updated["default_report_format"], "html")
+
+    @patch("builtins.input", side_effect=["", "", ""])
+    def test_prompt_settings_keeps_other_values(self, mock_input):
+        current = {"github_api_key": " secret ", "cache_directory": " /tmp/cache ", "default_report_format": "json"}
+
+        updated = prompt_settings(current)
+
+        self.assertEqual(updated["github_api_key"], " secret ")
+        self.assertEqual(updated["cache_directory"], " /tmp/cache ")
 
 
 class TestConfirmExit(unittest.TestCase):

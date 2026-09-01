@@ -135,22 +135,15 @@ def main() -> None:
                         use_cache = True
 
                 if not use_cache:
-                    report_format = menu.prompt_report_format()
+                    report_format = menu.prompt_report_format(app_settings["default_report_format"])
 
                     print("\nFetching data from GitHub...")
                     analysis, scores = analyze_repository(owner, repo)
 
                     # Cache only complete payloads; incomplete results should not
                     # replace a usable cache entry.
-                    _probe = {
-                        "version": cache.CACHE_VERSION,
-                        "owner": owner,
-                        "repo": repo,
-                        "fetched_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
-                        "analysis": analysis,
-                        "scores": scores,
-                    }
-                    if cache.is_cache_valid(_probe):
+                    cache_payload = cache.build_cache_payload(owner, repo, analysis, scores)
+                    if cache.is_cache_valid(cache_payload):
                         try:
                             cache.save_cache(owner, repo, analysis, scores)
                         except OSError as e:
@@ -159,20 +152,14 @@ def main() -> None:
 
                 else:
                     # Still need report format when serving from cache
-                    report_format = menu.prompt_report_format()
+                    report_format = menu.prompt_report_format(app_settings["default_report_format"])
                 
                 print("\n")
                 report.print_summary(scores, analysis)
-                
-                if report_format.lower() == "json":
-                    report_content = report.generate_json_report(analysis, scores)
-                    filename = f"{owner}_{repo}_report.json"
-                elif report_format.lower() == "html":
-                    report_content = report.generate_html_report(analysis, scores)
-                    filename = f"{owner}_{repo}_report.html"
-                else:
-                    report_content = report.generate_text_report(analysis, scores)
-                    filename = f"{owner}_{repo}_report.txt"
+
+                generator, extension = report.REPORT_FORMAT_GENERATORS[report_format]
+                report_content = generator(owner, repo, analysis, scores)
+                filename = f"{owner}_{repo}_report{extension}"
                 try:
                     report.save_report(report_content, filename)
                     print(f"\nReport saved to {filename}")

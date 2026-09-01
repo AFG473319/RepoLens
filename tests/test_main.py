@@ -237,6 +237,20 @@ class TestAnalyzeRepository(unittest.TestCase):
 
 
 class TestMain(unittest.TestCase):
+    def _format_map(self, mock_report) -> dict:
+        """Build a real REPORT_FORMAT_GENERATORS map backed by mock generators.
+
+        The main loop unpacks ``report.REPORT_FORMAT_GENERATORS[format]`` into
+        ``(generator, extension)`` and calls ``generator(owner, repo, analysis,
+        scores)`` uniformly, so the mocked module needs a real mapping rather
+        than a bare MagicMock attribute.
+        """
+        return {
+            "text": (mock_report.generate_text_report, ".txt"),
+            "json": (mock_report.generate_json_report, ".json"),
+            "html": (mock_report.generate_html_report, ".html"),
+        }
+
     @patch("main.menu")
     @patch("main.analyze_repository")
     @patch("main.report")
@@ -253,6 +267,7 @@ class TestMain(unittest.TestCase):
         mock_report.print_summary.return_value = None
         mock_report.generate_text_report.return_value = "report text"
         mock_report.save_report.return_value = None
+        mock_report.REPORT_FORMAT_GENERATORS = self._format_map(mock_report)
 
         with patch("builtins.print"):
             with patch("builtins.input", return_value=""):
@@ -261,7 +276,41 @@ class TestMain(unittest.TestCase):
         mock_menu.print_banner.assert_called()
         mock_analyze.assert_called_once_with("owner", "repo")
         mock_report.print_summary.assert_called_once()
-        mock_report.save_report.assert_called_once()
+        mock_report.generate_text_report.assert_called_once_with(
+            "owner", "repo", ANALYSIS_DICT, SCORES_DICT
+        )
+        mock_report.save_report.assert_called_once_with("report text", "owner_repo_report.txt")
+
+    @patch("main.settings.load_settings")
+    @patch("main.menu")
+    @patch("main.analyze_repository")
+    @patch("main.report")
+    def test_main_passes_default_format_to_prompt(
+        self, mock_report, mock_analyze, mock_menu, mock_load_settings
+    ):
+        mock_load_settings.return_value = {
+            "github_api_key": "key",
+            "cache_directory": "cache",
+            "default_report_format": "html",
+        }
+        mock_menu.print_banner.return_value = None
+        mock_menu.show_menu.return_value = None
+        mock_menu.get_user_choice.side_effect = ["Analyze a repository", "Exit"]
+        mock_menu.prompt_repo_input.return_value = ("owner", "repo")
+        mock_menu.prompt_report_format.return_value = "html"
+        mock_menu.confirm_exit.return_value = True
+        mock_analyze.return_value = (ANALYSIS_DICT, SCORES_DICT)
+        mock_report.generate_html_report.return_value = "<!DOCTYPE html>"
+        mock_report.REPORT_FORMAT_GENERATORS = self._format_map(mock_report)
+
+        with patch("builtins.print"):
+            with patch("builtins.input", return_value=""):
+                main.main()
+
+        mock_menu.prompt_report_format.assert_called_with("html")
+        mock_report.generate_html_report.assert_called_once_with(
+            "owner", "repo", ANALYSIS_DICT, SCORES_DICT
+        )
 
     @patch("main.menu")
     def test_main_exit_immediately(self, mock_menu):
@@ -314,12 +363,15 @@ class TestMain(unittest.TestCase):
         mock_menu.confirm_exit.return_value = True
         mock_analyze.return_value = (ANALYSIS_DICT, SCORES_DICT)
         mock_report.generate_json_report.return_value = '{"analysis": {}, "scores": {}}'
+        mock_report.REPORT_FORMAT_GENERATORS = self._format_map(mock_report)
 
         with patch("builtins.print"):
             with patch("builtins.input", return_value=""):
                 main.main()
 
-        mock_report.generate_json_report.assert_called_once_with(ANALYSIS_DICT, SCORES_DICT)
+        mock_report.generate_json_report.assert_called_once_with(
+            "owner", "repo", ANALYSIS_DICT, SCORES_DICT
+        )
         mock_report.generate_text_report.assert_not_called()
         mock_report.save_report.assert_called_once_with(
             '{"analysis": {}, "scores": {}}', "owner_repo_report.json"
@@ -335,12 +387,15 @@ class TestMain(unittest.TestCase):
         mock_menu.confirm_exit.return_value = True
         mock_analyze.return_value = (ANALYSIS_DICT, SCORES_DICT)
         mock_report.generate_html_report.return_value = "<!DOCTYPE html>"
+        mock_report.REPORT_FORMAT_GENERATORS = self._format_map(mock_report)
 
         with patch("builtins.print"):
             with patch("builtins.input", return_value=""):
                 main.main()
 
-        mock_report.generate_html_report.assert_called_once_with(ANALYSIS_DICT, SCORES_DICT)
+        mock_report.generate_html_report.assert_called_once_with(
+            "owner", "repo", ANALYSIS_DICT, SCORES_DICT
+        )
         mock_report.generate_text_report.assert_not_called()
         mock_report.generate_json_report.assert_not_called()
         mock_report.save_report.assert_called_once_with(
@@ -357,12 +412,16 @@ class TestMain(unittest.TestCase):
         mock_menu.confirm_exit.return_value = True
         mock_analyze.return_value = (ANALYSIS_DICT, SCORES_DICT)
         mock_report.generate_text_report.return_value = "report text"
+        mock_report.REPORT_FORMAT_GENERATORS = self._format_map(mock_report)
 
         with patch("builtins.print"):
             with patch("builtins.input", return_value=""):
                 main.main()
 
         mock_report.generate_json_report.assert_not_called()
+        mock_report.generate_text_report.assert_called_once_with(
+            "owner", "repo", ANALYSIS_DICT, SCORES_DICT
+        )
         mock_report.save_report.assert_called_once_with(
             "report text", "owner_repo_report.txt"
         )
@@ -378,6 +437,7 @@ class TestMain(unittest.TestCase):
         mock_analyze.return_value = (ANALYSIS_DICT, SCORES_DICT)
         mock_report.generate_text_report.return_value = "report text"
         mock_report.save_report.side_effect = PermissionError("denied")
+        mock_report.REPORT_FORMAT_GENERATORS = self._format_map(mock_report)
 
         with patch("builtins.print") as mock_print:
             with patch("builtins.input", return_value=""):
@@ -398,6 +458,7 @@ class TestMain(unittest.TestCase):
         mock_analyze.return_value = (ANALYSIS_DICT, SCORES_DICT)
         mock_report.generate_text_report.return_value = "report text"
         mock_report.save_report.side_effect = IOError("disk full")
+        mock_report.REPORT_FORMAT_GENERATORS = self._format_map(mock_report)
 
         with patch("builtins.print") as mock_print:
             with patch("builtins.input", return_value=""):

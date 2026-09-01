@@ -3,10 +3,31 @@ import os
 from pathlib import Path
 
 import cache
+from report import SUPPORTED_REPORT_FORMATS
 
 
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
 DEFAULT_CACHE_DIRECTORY = Path(__file__).resolve().parent / ".repolens_cache"
+DEFAULT_REPORT_FORMAT = "html"
+
+
+def _normalize_report_format(value: object) -> str:
+    """Normalize a report format value to a supported lowercase format.
+
+    Args:
+        value: Any candidate value (typically from user input or a saved
+            settings file).
+
+    Returns:
+        The stripped lowercase format when it is one of the supported
+        formats; otherwise ``DEFAULT_REPORT_FORMAT``.
+    """
+    if not isinstance(value, str):
+        return DEFAULT_REPORT_FORMAT
+    normalized = value.strip().lower()
+    if normalized in SUPPORTED_REPORT_FORMATS:
+        return normalized
+    return DEFAULT_REPORT_FORMAT
 
 
 def _default_settings() -> dict[str, str]:
@@ -14,13 +35,14 @@ def _default_settings() -> dict[str, str]:
 
     Returns:
         A dictionary containing the GitHub API key from ``GITHUB_API_KEY``
-        (or an empty string when it is not set) and the cache directory from
+        (or an empty string when it is not set), the cache directory from
         ``REPOLENS_CACHE_DIR`` (or the project-local default directory when it
-        is not set).
+        is not set), and the default report format (``"html"``).
     """
     return {
         "github_api_key": os.getenv("GITHUB_API_KEY", "").strip(),
         "cache_directory": os.getenv("REPOLENS_CACHE_DIR", str(DEFAULT_CACHE_DIRECTORY)).strip(),
+        "default_report_format": DEFAULT_REPORT_FORMAT,
     }
 
 
@@ -32,7 +54,8 @@ def load_settings() -> dict[str, str]:
     instead. Only recognized string values are accepted from the saved file.
 
     Returns:
-        A dictionary with ``github_api_key`` and ``cache_directory`` values.
+        A dictionary with ``github_api_key``, ``cache_directory``, and
+        ``default_report_format`` values.
     """
     settings = _default_settings()
     try:
@@ -43,6 +66,9 @@ def load_settings() -> dict[str, str]:
                 settings["github_api_key"] = saved["github_api_key"].strip()
             if isinstance(saved.get("cache_directory"), str) and saved["cache_directory"].strip():
                 settings["cache_directory"] = saved["cache_directory"].strip()
+            settings["default_report_format"] = _normalize_report_format(
+                saved.get("default_report_format")
+            )
     except (OSError, json.JSONDecodeError):
         pass
     return settings
@@ -65,10 +91,17 @@ def save_settings(settings: dict[str, str]) -> None:
 
     api_key = settings.get("github_api_key", "")
     cache_directory = settings.get("cache_directory", str(DEFAULT_CACHE_DIRECTORY))
+    report_format = settings.get("default_report_format", DEFAULT_REPORT_FORMAT)
     if not isinstance(api_key, str) or not isinstance(cache_directory, str):
         raise TypeError("setting values must be strings")
+    if not isinstance(report_format, str):
+        raise TypeError("setting values must be strings")
     cache_directory = cache_directory.strip() or str(DEFAULT_CACHE_DIRECTORY)
-    payload = {"github_api_key": api_key.strip(), "cache_directory": cache_directory}
+    payload = {
+        "github_api_key": api_key.strip(),
+        "cache_directory": cache_directory,
+        "default_report_format": _normalize_report_format(report_format),
+    }
     temporary = SETTINGS_PATH.with_suffix(".tmp")
     try:
         with open(temporary, "w", encoding="utf-8") as file:

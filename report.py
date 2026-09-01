@@ -1,8 +1,15 @@
+import datetime
 import json
 from html import escape
 from string import Template
 
 import github
+
+
+# Canonical list of supported report formats. Kept here so report generation,
+# the settings/validation layer, the interactive prompt, and the main-loop
+# dispatch all read it from this single source of truth.
+SUPPORTED_REPORT_FORMATS = ("text", "json", "html")
 
 
 def generate_text_report(analysis: dict, scores: dict) -> str:
@@ -425,7 +432,7 @@ _HTML_TEMPLATE = Template("""<!DOCTYPE html>
   <div class="progress" id="progress"></div>
 </div>
 <header class="hero">
-<h1><span class="owner">$owner</span><span class="sep">&gt;</span> $repo</h1>
+<h1><span class="owner">$owner</span><span class="sep">&gt;</span> <span class="repo-name">$repo</span></h1>
 <p class="hero-desc">$description</p>
 <p class="hero-meta mono">$generated</p>
 <div class="health">
@@ -598,7 +605,7 @@ $limits_body
         r.querySelector(".num").textContent.replace("/100", "").trim(); }).join(" \\u00b7 ");
     var stars = rows[0] ? rows[0].querySelector(".v").textContent : "";
     var issues = rows[rows.length - 1] ? rows[rows.length - 1].querySelector(".v").textContent : "";
-    return ["RepoLens \\u2014 " + h1.querySelector(".owner").textContent + "/" + h1.querySelector("span:last-child").textContent,
+    return ["RepoLens \\u2014 " + h1.querySelector(".owner").textContent + "/" + h1.querySelector(".repo-name").textContent,
       "Health " + health + "/100 (" + grade + ")", dims,
       "Stars " + stars + " · Issues " + issues,
       document.querySelector(".hero-meta").textContent].join("\\n"); }
@@ -640,7 +647,7 @@ $limits_body
 """)
 
 
-def generate_html_report(analysis: dict, scores: dict) -> str:
+def generate_html_report(owner: str, repo_name: str, analysis: dict, scores: dict) -> str:
     """Generate a self-contained interactive HTML report.
 
     The output is a single file with inline CSS/JS and no external
@@ -648,6 +655,8 @@ def generate_html_report(analysis: dict, scores: dict) -> str:
     string is HTML-escaped before interpolation.
 
     Args:
+        owner: GitHub username or organization that owns the repository.
+        repo_name: Repository name.
         analysis: Dictionary containing analyzed metrics.
         scores: Dictionary containing calculated scores.
 
@@ -660,8 +669,21 @@ def generate_html_report(analysis: dict, scores: dict) -> str:
     languages = analysis.get("languages") or {}
     issues = analysis.get("issues") or {}
 
-    owner = _display(repo.get("name"), "Unknown")
     description = _display(repo.get("description"), "No description")
+
+    def _label(value, fallback: str) -> str:
+        """Render the owner/repo label, stripping whitespace.
+
+        Blank or non-string values fall back to the placeholder so the
+        hero never renders an empty label or a value the user did not
+        supply.
+        """
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return fallback
+
+    owner = _label(owner, "Unknown")
+    repo_label = _label(repo_name, "Unknown")
 
     def score_value(key) -> float:
         try:
@@ -740,15 +762,15 @@ def generate_html_report(analysis: dict, scores: dict) -> str:
     health_grade = raw_grade.upper() if raw_grade else _grade_of(health)
     health_cls = f"g-{health_grade}" if health_grade else "g-Neutral"
 
-    generated = __import__("datetime").datetime.now(
-        __import__("datetime").timezone.utc
-    ).strftime("%Y-%m-%d %H:%M UTC")
+    generated = datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y-%m-%d %H:%M UTC"
+    )
 
     return _HTML_TEMPLATE.substitute(
-        title=escape(f"RepoLens Report — {owner}"),
-        crumb=escape(f"~/report/{owner}"),
+        title=escape(f"RepoLens Report — {owner}/{repo_label}"),
+        crumb=escape(f"~/report/{owner}/{repo_label}"),
         owner=escape(owner),
-        repo=escape(owner),
+        repo=escape(repo_label),
         description=escape(description),
         generated=f"generated {generated}",
         health=f"{health:.1f}",
@@ -759,3 +781,21 @@ def generate_html_report(analysis: dict, scores: dict) -> str:
         metric_rows="\n".join(metric_rows),
         limits_body=limits_body,
     )
+
+
+# Data-driven dispatch: each supported format maps to a generator callable
+# and the file extension used when saving the report. The adapters keep the
+# registry's common call signature without hiding the behavior in lambdas.
+def _generate_text_report(owner: str, repo: str, analysis: dict, scores: dict) -> str:
+    return generate_text_report(analysis, scores)
+
+
+def _generate_json_report(owner: str, repo: str, analysis: dict, scores: dict) -> str:
+    return generate_json_report(analysis, scores)
+
+
+REPORT_FORMAT_GENERATORS = {
+    "text": (_generate_text_report, ".txt"),
+    "json": (_generate_json_report, ".json"),
+    "html": (generate_html_report, ".html"),
+}

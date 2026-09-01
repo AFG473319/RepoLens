@@ -11,6 +11,8 @@ from report import (
     generate_html_report,
     save_report,
     print_summary,
+    REPORT_FORMAT_GENERATORS,
+    SUPPORTED_REPORT_FORMATS,
 )
 
 
@@ -165,8 +167,20 @@ class TestGenerateHtmlReport(unittest.TestCase):
         # escaped text, which would show as the literal string "None")
         self.assertNotIn("None", result.replace("<!-- None", ""))
 
+    def test_registry_covers_every_supported_format(self):
+        for fmt in SUPPORTED_REPORT_FORMATS:
+            self.assertIn(fmt, REPORT_FORMAT_GENERATORS)
+
+    def test_registry_generators_return_strings(self):
+        analysis = self._analysis()
+        scores = self._scores()
+        for fmt, (generator, extension) in REPORT_FORMAT_GENERATORS.items():
+            result = generator("pallets", "flask", analysis, scores)
+            self.assertIsInstance(result, str)
+            self.assertTrue(extension.startswith("."))
+
     def test_returns_complete_html_document(self):
-        result = generate_html_report(self._analysis(), self._scores())
+        result = generate_html_report("pallets", "flask", self._analysis(), self._scores())
 
         self.assertIsInstance(result, str)
         self.assertIn("<!DOCTYPE html>", result)
@@ -175,7 +189,7 @@ class TestGenerateHtmlReport(unittest.TestCase):
         self.assertIn("<title>", result)
 
     def test_contains_hero_and_all_data(self):
-        result = generate_html_report(self._analysis(), self._scores())
+        result = generate_html_report("pallets", "flask", self._analysis(), self._scores())
 
         self.assertIn("flask", result)
         self.assertIn("A micro framework", result)
@@ -191,8 +205,24 @@ class TestGenerateHtmlReport(unittest.TestCase):
         self.assertIn("85.9", result)
         self.assertIn(">A</span>", result)
 
+    def test_hero_renders_owner_and_repo_distinctly(self):
+        # The hero must show {owner} > {repo}; this regressed when the repo
+        # name (stored in analysis["repo"]["name"]) was reused for both.
+        result = generate_html_report("pallets", "flask", self._analysis(), self._scores())
+
+        self.assertIn('<span class="owner">pallets</span>', result)
+        self.assertIn('<span class="sep">&gt;</span>', result)
+        self.assertIn('<span class="repo-name">flask</span>', result)
+        self.assertIn('<title>RepoLens Report — pallets/flask</title>', result)
+
+    def test_hero_falls_back_to_unknown(self):
+        result = generate_html_report("", "", {}, {})
+
+        self.assertIn('<span class="owner">Unknown</span>', result)
+        self.assertIn('<span class="repo-name">Unknown</span>', result)
+
     def test_section_headings_present(self):
-        result = generate_html_report(self._analysis(), self._scores())
+        result = generate_html_report("pallets", "flask", self._analysis(), self._scores())
 
         self.assertIn("scores", result)
         self.assertIn("metrics", result)
@@ -203,7 +233,7 @@ class TestGenerateHtmlReport(unittest.TestCase):
         analysis["approximate"] = True
         analysis["truncated_endpoints"] = ["commits", "issues"]
 
-        result = generate_html_report(analysis, self._scores())
+        result = generate_html_report("pallets", "flask", analysis, self._scores())
 
         self.assertIn("approximate", result)
         self.assertIn(f"more than {github.MAX_PAGES * github.PER_PAGE:,} results", result)
@@ -214,19 +244,26 @@ class TestGenerateHtmlReport(unittest.TestCase):
         analysis["approximate"] = False
         analysis["truncated_endpoints"] = []
 
-        result = generate_html_report(analysis, self._scores())
+        result = generate_html_report("pallets", "flask", analysis, self._scores())
 
         self.assertIn("No pagination truncation", result)
 
     def test_escapes_repo_sourced_strings(self):
         analysis = self._analysis()
-        analysis["repo"]["name"] = 'flask"><script>alert(1)</script>'
         analysis["repo"]["description"] = "desc & <b>bold</b> \"quoted\""
+        # The owner/repo parameters are external strings rendered into the
+        # hero and title; they must be HTML-escaped before interpolation.
+        result = generate_html_report(
+            'pallets"><script>alert(1)</script>',
+            'flask"><script>alert(2)</script>',
+            analysis,
+            self._scores(),
+        )
 
-        result = generate_html_report(analysis, self._scores())
-
-        self.assertNotIn("<script>alert(1)</script>", result)
-        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", result)
+        self.assertNotIn('<script>alert(1)</script>', result)
+        self.assertNotIn('<script>alert(2)</script>', result)
+        self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt;', result)
+        self.assertIn('&lt;script&gt;alert(2)&lt;/script&gt;', result)
         self.assertIn("desc &amp; &lt;b&gt;bold&lt;/b&gt; &quot;quoted&quot;", result)
         self._assert_no_none(result)
 
@@ -235,12 +272,12 @@ class TestGenerateHtmlReport(unittest.TestCase):
         analysis["approximate"] = True
         analysis["truncated_endpoints"] = ['<script>x</script>']
 
-        result = generate_html_report(analysis, self._scores())
+        result = generate_html_report("pallets", "flask", analysis, self._scores())
 
         self.assertNotIn("<script>x</script>", result)
 
     def test_handles_empty_analysis_and_scores(self):
-        result = generate_html_report({}, {})
+        result = generate_html_report("pallets", "flask", {}, {})
 
         self.assertIn("<!DOCTYPE html>", result)
         self._assert_no_none(result)
@@ -248,7 +285,7 @@ class TestGenerateHtmlReport(unittest.TestCase):
 
     def test_handles_missing_sub_dicts(self):
         analysis = {"approximate": False}
-        result = generate_html_report(analysis, {})
+        result = generate_html_report("pallets", "flask", analysis, {})
 
         self.assertIn("<!DOCTYPE html>", result)
         self._assert_no_none(result)
@@ -262,7 +299,7 @@ class TestGenerateHtmlReport(unittest.TestCase):
             "languages": {"primary_language": None, "language_count": 0},
             "issues": {"total_issues": 0, "open_issues": 0, "closed_issues": 0},
         }
-        result = generate_html_report(analysis, {})
+        result = generate_html_report("pallets", "flask", analysis, {})
 
         self.assertIn("No description", result)
         self.assertIn("N/A", result)
@@ -272,7 +309,7 @@ class TestGenerateHtmlReport(unittest.TestCase):
     def test_scores_clamped_to_zero_hundred(self):
         analysis = self._analysis()
         scores = {"health_score": 142.0, "activity_score": -7.0, "community_score": 50.0, "maintainability_score": 100.0, "grade": "A"}
-        result = generate_html_report(analysis, scores)
+        result = generate_html_report("pallets", "flask", analysis, scores)
 
         # bars carry width via the --w custom property; clamped to 0-100
         self.assertNotIn("--w: 142%", result)
@@ -283,7 +320,7 @@ class TestGenerateHtmlReport(unittest.TestCase):
     def test_non_numeric_scores_render_zero_width(self):
         analysis = self._analysis()
         scores = {"health_score": None, "activity_score": "high", "community_score": 50.0, "maintainability_score": 80.0, "grade": "B"}
-        result = generate_html_report(analysis, scores)
+        result = generate_html_report("pallets", "flask", analysis, scores)
 
         self.assertNotIn("--w: None%", result)
         self.assertNotIn("--w: high%", result)
@@ -293,25 +330,26 @@ class TestGenerateHtmlReport(unittest.TestCase):
         analysis = self._analysis()
         scores = self._scores()
         scores["grade"] = "X"
-        result = generate_html_report(analysis, scores)
+        result = generate_html_report("pallets", "flask", analysis, scores)
 
         self.assertIn("g-Neutral", result)
 
     def test_missing_grade_gets_neutral_style(self):
-        result = generate_html_report(self._analysis(), {"health_score": 50.0})
+        result = generate_html_report("pallets", "flask", self._analysis(), {"health_score": 50.0})
         self.assertIn("g-Neutral", result)
 
     def test_unicode_survives(self):
         analysis = self._analysis()
-        analysis["repo"]["name"] = "プロジェクト-ünïcodé"
         analysis["repo"]["description"] = "Résumé — 中文说明 🎉"
-        result = generate_html_report(analysis, self._scores())
+        result = generate_html_report(
+            "pallets", "プロジェクト-ünïcodé", analysis, self._scores()
+        )
 
         self.assertIn("プロジェクト-ünïcodé", result)
         self.assertIn("Résumé — 中文说明", result)
 
     def test_thousands_separators_on_counts(self):
-        result = generate_html_report(self._analysis(), self._scores())
+        result = generate_html_report("pallets", "flask", self._analysis(), self._scores())
         self.assertIn("69,500", result)
         self.assertIn("8,500", result)
 

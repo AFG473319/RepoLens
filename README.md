@@ -35,7 +35,7 @@ RepoLens fetches repository data from the GitHub REST API — metadata, commits,
 - **Three-dimension scoring** — Activity, Community, and Maintainability (0–100 each), averaged into a health score with an A–F letter grade
 - **Three report formats** — `.txt` for quick reading, `.json` for tooling, and a single self-contained `.html` with score bars, expandable grade rulers, metric filtering, a theme toggle, and keyboard shortcuts (no external requests — renders offline and prints cleanly)
 - **Interactive CLI** — menus, confirmations, and a figlet banner
-- **Settings menu** — set your API key and cache directory without editing files (persisted to `settings.json`)
+- **Settings menu** — set your API key, cache directory, and default report format without editing files (persisted to `settings.json`)
 - **Filesystem cache** — 24 h TTL, keyed per repository, atomic writes, strict validation; reuse is always opt-in via a prompt
 - **Truncation awareness** — follows GitHub pagination up to 1,000 items per endpoint and flags counts as lower bounds when capped
 - **Rate-limit resilience** — retries transient failures with exponential backoff; exhausted primary limits fail fast with a reset-time hint
@@ -75,7 +75,7 @@ All modules live flat at the repo root — no package installation needed beyond
 
 RepoLens works out of the box: without a token you get GitHub's unauthenticated limit of 60 requests/hour. Add a personal access token to raise that to 5,000/hour.
 
-**Option 1 — Settings menu (recommended).** Run the app and pick **Settings**. Enter your API key (an existing one is shown masked; press Enter to keep it) and optionally a cache directory. Choices persist to `settings.json` (gitignored, created on first save).
+**Option 1 — Settings menu (recommended).** Run the app and pick **Settings**. Enter your API key (an existing one is shown masked; press Enter to keep it) and optionally a cache directory, plus a default report format. Choices persist to `settings.json` (gitignored, created on first save).
 
 **Option 2 — `.env` file.** Copy `.env.example` to `.env`:
 
@@ -110,7 +110,7 @@ python main.py
 1. Choose **Analyze a repository**
 2. Enter the **owner** and **name** (e.g. `torvalds` and `linux`) — input is whitespace-stripped
 3. If a fresh, complete cache entry exists (≤ 24 h old) you're asked whether to reuse it — `y` skips all GitHub fetches, `n` refetches and refreshes the cache
-4. Pick a report format: `Text`, `JSON`, or `HTML` (asked on both the fresh-fetch and cache-hit paths)
+4. Pick a report format: type `text`, `json`, or `html`. Pressing Enter uses your saved default from Settings (`html` until changed). Asked on both the fresh-fetch and cache-hit paths
 5. Watch the per-endpoint fetch progress, then read the terminal summary
 6. The report is saved to the current directory as `{owner}_{repo}_report.{txt|json|html}`
 
@@ -124,10 +124,7 @@ Enter the repository name: linux
 Found cached analysis for torvalds/linux from 5 hours ago.
 The cache is recent (within 24h) and contains a complete analysis.
 Use cached data? (y = use cache, n = fetch fresh) [y/n]: n
-1. Text
-2. JSON
-3. HTML
-> 3
+Report format (text, json, html) [html]: html
 
 Fetching data from GitHub...
 Fetching repository metadata for torvalds/linux...
@@ -147,10 +144,7 @@ A cache hit (`y`) skips the fetch but still asks for the format:
 
 ```text
 Using cached data for torvalds/linux (5 hours ago) — skipping GitHub fetch.
-1. Text
-2. JSON
-3. HTML
-> 3
+Report format (text, json, html) [html]:
 
 Summary
   Health score: 92.5

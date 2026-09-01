@@ -14,6 +14,7 @@ class TestSettings(unittest.TestCase):
             values = settings._default_settings()
         self.assertEqual(values["github_api_key"], "")
         self.assertEqual(values["cache_directory"], str(settings.DEFAULT_CACHE_DIRECTORY))
+        self.assertEqual(values["default_report_format"], "html")
 
     def test_load_settings_missing_file_uses_defaults(self):
         with patch.object(settings, "SETTINGS_PATH", Path("missing-settings.json")):
@@ -26,7 +27,7 @@ class TestSettings(unittest.TestCase):
             values = {"github_api_key": " secret ", "cache_directory": " /tmp/cache "}
             with patch.object(settings, "SETTINGS_PATH", path):
                 settings.save_settings(values)
-                self.assertEqual(settings.load_settings(), {"github_api_key": "secret", "cache_directory": "/tmp/cache"})
+                self.assertEqual(settings.load_settings(), {"github_api_key": "secret", "cache_directory": "/tmp/cache", "default_report_format": "html"})
 
     def test_load_settings_ignores_malformed_json(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -57,6 +58,79 @@ class TestSettings(unittest.TestCase):
             self.assertEqual(os.environ["GITHUB_API_KEY"], "secret")
             self.assertEqual(os.environ["REPOLENS_CACHE_DIR"], "cache")
             self.assertEqual(cache.CACHE_DIR, Path("cache"))
+
+
+class TestDefaultReportFormat(unittest.TestCase):
+    def test_load_settings_accepts_saved_format(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text(json.dumps({"default_report_format": "json"}), encoding="utf-8")
+            with patch.object(settings, "SETTINGS_PATH", path):
+                self.assertEqual(settings.load_settings()["default_report_format"], "json")
+
+    def test_load_settings_normalizes_case(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text(json.dumps({"default_report_format": " HTML "}), encoding="utf-8")
+            with patch.object(settings, "SETTINGS_PATH", path):
+                self.assertEqual(settings.load_settings()["default_report_format"], "html")
+
+    def test_load_settings_rejects_invalid_format(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text(json.dumps({"default_report_format": "pdf"}), encoding="utf-8")
+            with patch.object(settings, "SETTINGS_PATH", path):
+                self.assertEqual(settings.load_settings()["default_report_format"], "html")
+
+    def test_load_settings_rejects_non_string_format(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text(json.dumps({"default_report_format": 3}), encoding="utf-8")
+            with patch.object(settings, "SETTINGS_PATH", path):
+                self.assertEqual(settings.load_settings()["default_report_format"], "html")
+
+    def test_load_settings_missing_format_defaults_to_html(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text(json.dumps({"github_api_key": "key"}), encoding="utf-8")
+            with patch.object(settings, "SETTINGS_PATH", path):
+                self.assertEqual(settings.load_settings()["default_report_format"], "html")
+
+    def test_save_settings_normalizes_case_and_strips(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            with patch.object(settings, "SETTINGS_PATH", path):
+                settings.save_settings({"default_report_format": "  JSON  "})
+                saved = json.loads(path.read_text(encoding="utf-8"))
+                self.assertEqual(saved["default_report_format"], "json")
+
+    def test_save_settings_blank_format_uses_html_default(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            with patch.object(settings, "SETTINGS_PATH", path):
+                settings.save_settings({"default_report_format": "   "})
+                saved = json.loads(path.read_text(encoding="utf-8"))
+                self.assertEqual(saved["default_report_format"], "html")
+
+    def test_save_settings_invalid_format_uses_html_default(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            with patch.object(settings, "SETTINGS_PATH", path):
+                settings.save_settings({"default_report_format": "pdf"})
+                saved = json.loads(path.read_text(encoding="utf-8"))
+                self.assertEqual(saved["default_report_format"], "html")
+
+    def test_save_settings_missing_format_key_still_saves(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            with patch.object(settings, "SETTINGS_PATH", path):
+                settings.save_settings({"github_api_key": "key", "cache_directory": "cache"})
+                saved = json.loads(path.read_text(encoding="utf-8"))
+                self.assertEqual(saved["default_report_format"], "html")
+
+    def test_save_settings_rejects_non_string_format(self):
+        with self.assertRaises(TypeError):
+            settings.save_settings({"default_report_format": 2})
 
 
 if __name__ == "__main__":

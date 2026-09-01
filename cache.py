@@ -184,6 +184,36 @@ def _parse_iso(date_str: str) -> datetime | None:
         return None
 
 
+def build_cache_payload(
+    owner: str,
+    repo: str,
+    analysis: dict,
+    scores: dict,
+    fetched_at: datetime | None = None,
+) -> dict:
+    """Build the canonical cache payload for an analysis.
+
+    Args:
+        owner: GitHub username or organization that owns the repository.
+        repo: Repository name.
+        analysis: Analyzed repository data.
+        scores: Calculated repository scores.
+        fetched_at: Timestamp to store; defaults to the current UTC time.
+
+    Returns:
+        A cache payload suitable for validation or persistence.
+    """
+    timestamp = fetched_at if fetched_at is not None else _now()
+    return {
+        "version": CACHE_VERSION,
+        "owner": owner,
+        "repo": repo,
+        "fetched_at": timestamp.isoformat(),
+        "analysis": analysis,
+        "scores": scores,
+    }
+
+
 def is_cache_valid(data: dict) -> bool:
     """Determine whether a cache payload contains all data required for reuse.
 
@@ -323,14 +353,7 @@ def save_cache(owner: str, repo: str, analysis: dict, scores: dict, cache_dir: P
     directory = cache_dir if cache_dir is not None else CACHE_DIR
     directory.mkdir(parents=True, exist_ok=True)
     path = _cache_path(owner, repo, directory)
-    payload = {
-        "version": CACHE_VERSION,
-        "owner": owner,
-        "repo": repo,
-        "fetched_at": (fetched_at if fetched_at is not None else _now()).isoformat(),
-        "analysis": analysis,
-        "scores": scores,
-    }
+    payload = build_cache_payload(owner, repo, analysis, scores, fetched_at)
     # atomic: write temp then replace
     tmp = path.with_suffix(".tmp")
     try:

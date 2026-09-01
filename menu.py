@@ -1,6 +1,8 @@
 from rich.console import Console
 from rich_pyfiglet import RichFiglet
 
+from report import SUPPORTED_REPORT_FORMATS
+
 
 def print_banner() -> None:
     """Render the application banner in the terminal.
@@ -58,7 +60,13 @@ def prompt_settings(current: dict[str, str]) -> dict[str, str]:
     cache_directory = input(
         f"Cache directory [{current.get('cache_directory', '')}]: "
     ).strip() or current.get("cache_directory", "")
-    return {"github_api_key": api_key, "cache_directory": cache_directory}
+    current_format = current.get("default_report_format", "html")
+    report_format = _read_report_format(current_format)
+    return {
+        "github_api_key": api_key,
+        "cache_directory": cache_directory,
+        "default_report_format": report_format,
+    }
 
 
 def prompt_repo_input() -> tuple[str, str]:
@@ -72,15 +80,34 @@ def prompt_repo_input() -> tuple[str, str]:
     return (owner, repo)
 
 
-def prompt_report_format() -> str:
-    """Read the user's preferred report format.
+def _read_report_format(current: str) -> str:
+    """Read a report format choice, accepting names or Enter.
+
+    Args:
+        current: Format returned when the user presses Enter.
 
     Returns:
         The selected format in lowercase.
     """
-    formats = ["Text", "JSON", "HTML"]
-    show_menu(formats)
-    return get_user_choice(formats).lower()
+    while True:
+        answer = input(f"Report format ({', '.join(SUPPORTED_REPORT_FORMATS)}) [{current}]: ").strip().lower()
+        if not answer:
+            return current
+        if answer in SUPPORTED_REPORT_FORMATS:
+            return answer
+        print(f"Please enter {', '.join(SUPPORTED_REPORT_FORMATS)}.")
+
+
+def prompt_report_format(default_format: str) -> str:
+    """Read the report format to use, defaulting to the saved preference.
+
+    Args:
+        default_format: Format returned when the user presses Enter.
+
+    Returns:
+        The selected format in lowercase.
+    """
+    return _read_report_format(default_format)
 
 
 def confirm_clear_cache() -> bool:
