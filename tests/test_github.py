@@ -1,8 +1,10 @@
 import sys
 import unittest
 from unittest.mock import patch, MagicMock
+
 import requests
-import github
+
+import provider as github
 
 
 def _mock_response(data, next_url=None):

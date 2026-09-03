@@ -5,7 +5,7 @@ import requests
 import dotenv
 import cache
 import menu
-import github
+import provider as github
 import analyzer
 import scoring
 import report

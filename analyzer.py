@@ -1,5 +1,3 @@
-import github
-
 def analyze_repo(repo_data: dict) -> dict:
     """Analyze a repository and extract key metrics.
 

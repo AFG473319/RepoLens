@@ -3,7 +3,7 @@ import json
 from html import escape
 from string import Template
 
-import github
+import provider
 
 
 # Canonical list of supported report formats. Kept here so report generation,
@@ -28,7 +28,7 @@ def generate_text_report(analysis: dict, scores: dict) -> str:
     languages = analysis.get("languages", {})
     issues = analysis.get("issues", {})
     if analysis.get("approximate", False):
-        limit = github.MAX_PAGES * github.PER_PAGE
+        limit = provider.MAX_PAGES * provider.PER_PAGE
         approximate = (
             "\nNote: This report is approximated because one or more GitHub"
             f" endpoints returned more than {limit} results, so counts are"
@@ -124,7 +124,7 @@ def print_summary(scores: dict, analysis: dict | None = None) -> None:
     print(f"  Grade: {scores.get('grade')}")
 
     if analysis and analysis.get("approximate", False):
-        limit = github.MAX_PAGES * github.PER_PAGE
+        limit = provider.MAX_PAGES * provider.PER_PAGE
         truncated_endpoints = ", ".join(analysis.get("truncated_endpoints", []))
         message = (
             "\nWarning: counts are approximate because one or more GitHub"
@@ -742,7 +742,7 @@ def generate_html_report(owner: str, repo_name: str, analysis: dict, scores: dic
         )
 
     if analysis.get("approximate", False):
-        limit = github.MAX_PAGES * github.PER_PAGE
+        limit = provider.MAX_PAGES * provider.PER_PAGE
         truncated = ", ".join(
             escape(str(endpoint)) for endpoint in analysis.get("truncated_endpoints", [])
         )
