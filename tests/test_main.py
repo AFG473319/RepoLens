@@ -24,19 +24,19 @@ SCORES_DICT = {
 
 
 class TestAnalyzeRepository(unittest.TestCase):
-    @patch("main.github")
+    @patch("main.provider")
     @patch("main.analyzer")
     @patch("main.scoring")
-    def test_analyze_repository_pipeline(self, mock_scoring, mock_analyzer, mock_github):
-        mock_github.get_repo.return_value = {"name": "test-repo"}
-        mock_github.get_commits.return_value = (
+    def test_analyze_repository_pipeline(self, mock_scoring, mock_analyzer, mock_provider):
+        mock_provider.get_repo.return_value = {"name": "test-repo"}
+        mock_provider.get_commits.return_value = (
             [{"commit": {"author": {"name": "Alice", "date": "2024-06-15"}}}], False,
         )
-        mock_github.get_contributors.return_value = (
+        mock_provider.get_contributors.return_value = (
             [{"login": "Alice", "contributions": 10}], False,
         )
-        mock_github.get_languages.return_value = {"Python": 1000}
-        mock_github.get_issues.return_value = (
+        mock_provider.get_languages.return_value = {"Python": 1000}
+        mock_provider.get_issues.return_value = (
             [{"state": "open"}, {"state": "closed"}], False,
         )
 
@@ -66,17 +66,17 @@ class TestAnalyzeRepository(unittest.TestCase):
         self.assertEqual(scores["maintainability_score"], 90.0)
         self.assertEqual(scores["grade"], "B")
 
-    @patch("main.github")
+    @patch("main.provider")
     @patch("main.analyzer")
     @patch("main.scoring")
     def test_approximate_flag_set_when_endpoint_truncated(
-        self, mock_scoring, mock_analyzer, mock_github
+        self, mock_scoring, mock_analyzer, mock_provider
     ):
-        mock_github.get_repo.return_value = {}
-        mock_github.get_commits.return_value = ([{"n": 1}], True)
-        mock_github.get_contributors.return_value = ([], False)
-        mock_github.get_languages.return_value = {}
-        mock_github.get_issues.return_value = ([], False)
+        mock_provider.get_repo.return_value = {}
+        mock_provider.get_commits.return_value = ([{"n": 1}], True)
+        mock_provider.get_contributors.return_value = ([], False)
+        mock_provider.get_languages.return_value = {}
+        mock_provider.get_issues.return_value = ([], False)
 
         for name in (
             "analyze_repo",
@@ -93,17 +93,17 @@ class TestAnalyzeRepository(unittest.TestCase):
         self.assertTrue(analysis["approximate"])
         self.assertEqual(analysis["truncated_endpoints"], ["commits"])
 
-    @patch("main.github")
+    @patch("main.provider")
     @patch("main.analyzer")
     @patch("main.scoring")
     def test_approximate_flag_unset_when_nothing_truncated(
-        self, mock_scoring, mock_analyzer, mock_github
+        self, mock_scoring, mock_analyzer, mock_provider
     ):
-        mock_github.get_repo.return_value = {}
-        mock_github.get_commits.return_value = ([], False)
-        mock_github.get_contributors.return_value = ([], False)
-        mock_github.get_languages.return_value = {}
-        mock_github.get_issues.return_value = ([], False)
+        mock_provider.get_repo.return_value = {}
+        mock_provider.get_commits.return_value = ([], False)
+        mock_provider.get_contributors.return_value = ([], False)
+        mock_provider.get_languages.return_value = {}
+        mock_provider.get_issues.return_value = ([], False)
 
         for name in (
             "analyze_repo",
@@ -122,18 +122,18 @@ class TestAnalyzeRepository(unittest.TestCase):
 
     @patch("main.dotenv.load_dotenv")
     @patch("main.os.getenv")
-    @patch("main.github")
+    @patch("main.provider")
     @patch("main.analyzer")
     @patch("main.scoring")
     def test_api_key_from_env_is_passed(
-        self, mock_scoring, mock_analyzer, mock_github, mock_getenv, mock_load_dotenv
+        self, mock_scoring, mock_analyzer, mock_provider, mock_getenv, mock_load_dotenv
     ):
         mock_getenv.return_value = "secret"
-        mock_github.get_repo.return_value = {}
-        mock_github.get_commits.return_value = ([], False)
-        mock_github.get_contributors.return_value = ([], False)
-        mock_github.get_languages.return_value = {}
-        mock_github.get_issues.return_value = ([], False)
+        mock_provider.get_repo.return_value = {}
+        mock_provider.get_commits.return_value = ([], False)
+        mock_provider.get_contributors.return_value = ([], False)
+        mock_provider.get_languages.return_value = {}
+        mock_provider.get_issues.return_value = ([], False)
 
         mock_analyzer.analyze_repo.return_value = {}
         mock_analyzer.analyze_commits.return_value = {}
@@ -149,27 +149,27 @@ class TestAnalyzeRepository(unittest.TestCase):
 
         main.analyze_repository("owner", "repo")
 
-        mock_github.get_repo.assert_called_once_with("owner", "repo", api_key="secret")
-        mock_github.get_commits.assert_called_once_with("owner", "repo", "secret")
-        mock_github.get_contributors.assert_called_once_with("owner", "repo", "secret")
-        mock_github.get_languages.assert_called_once_with("owner", "repo", "secret")
-        mock_github.get_issues.assert_called_once_with("owner", "repo", "secret")
+        mock_provider.get_repo.assert_called_once_with("owner", "repo", api_key="secret", platform="github")
+        mock_provider.get_commits.assert_called_once_with("owner", "repo", api_key="secret", platform="github")
+        mock_provider.get_contributors.assert_called_once_with("owner", "repo", api_key="secret", platform="github")
+        mock_provider.get_languages.assert_called_once_with("owner", "repo", api_key="secret", platform="github")
+        mock_provider.get_issues.assert_called_once_with("owner", "repo", api_key="secret", platform="github")
 
-    @patch("main.github")
+    @patch("main.provider")
     @patch("main.analyzer")
     @patch("main.scoring")
-    def test_analyzer_receives_raw_data(self, mock_scoring, mock_analyzer, mock_github):
+    def test_analyzer_receives_raw_data(self, mock_scoring, mock_analyzer, mock_provider):
         repo_data = {"name": "test-repo"}
         commits_data = [{"sha": "abc"}]
         contributors_data = [{"login": "Alice"}]
         languages_data = {"Python": 10}
         issues_data = [{"state": "open"}]
 
-        mock_github.get_repo.return_value = repo_data
-        mock_github.get_commits.return_value = (commits_data, False)
-        mock_github.get_contributors.return_value = (contributors_data, False)
-        mock_github.get_languages.return_value = languages_data
-        mock_github.get_issues.return_value = (issues_data, False)
+        mock_provider.get_repo.return_value = repo_data
+        mock_provider.get_commits.return_value = (commits_data, False)
+        mock_provider.get_contributors.return_value = (contributors_data, False)
+        mock_provider.get_languages.return_value = languages_data
+        mock_provider.get_issues.return_value = (issues_data, False)
 
         mock_analyzer.analyze_repo.return_value = {}
         mock_analyzer.analyze_commits.return_value = {}
@@ -191,15 +191,15 @@ class TestAnalyzeRepository(unittest.TestCase):
         mock_analyzer.analyze_languages.assert_called_once_with(languages_data)
         mock_analyzer.analyze_issues.assert_called_once_with(issues_data)
 
-    @patch("main.github")
+    @patch("main.provider")
     @patch("main.analyzer")
     @patch("main.scoring")
-    def test_scoring_receives_analysis_subdicts(self, mock_scoring, mock_analyzer, mock_github):
-        mock_github.get_repo.return_value = {}
-        mock_github.get_commits.return_value = ([], False)
-        mock_github.get_contributors.return_value = ([], False)
-        mock_github.get_languages.return_value = {}
-        mock_github.get_issues.return_value = ([], False)
+    def test_scoring_receives_analysis_subdicts(self, mock_scoring, mock_analyzer, mock_provider):
+        mock_provider.get_repo.return_value = {}
+        mock_provider.get_commits.return_value = ([], False)
+        mock_provider.get_contributors.return_value = ([], False)
+        mock_provider.get_languages.return_value = {}
+        mock_provider.get_issues.return_value = ([], False)
 
         mock_analyzer.analyze_repo.return_value = {"stars": 1}
         mock_analyzer.analyze_commits.return_value = {"total_commits": 1}
@@ -467,6 +467,54 @@ class TestMain(unittest.TestCase):
         self.assertTrue(
             any("disk full" in str(c) for c in mock_print.call_args_list)
         )
+
+    @patch("main.menu")
+    @patch("main.analyze_repository")
+    @patch("main.report")
+    def test_main_analyze_gitlab_flow(self, mock_report, mock_analyze, mock_menu):
+        mock_menu.print_banner.return_value = None
+        mock_menu.show_menu.return_value = None
+        mock_menu.get_user_choice.side_effect = ["Analyze a GitLab repository", "Exit"]
+        mock_menu.prompt_gitlab_repo_input.return_value = ("gitlab-org", "gitlab")
+        mock_menu.prompt_report_format.return_value = "text"
+        mock_menu.confirm_exit.return_value = True
+
+        mock_analyze.return_value = (ANALYSIS_DICT, SCORES_DICT)
+        mock_report.print_summary.return_value = None
+        mock_report.generate_text_report.return_value = "report text"
+        mock_report.save_report.return_value = None
+        mock_report.REPORT_FORMAT_GENERATORS = self._format_map(mock_report)
+
+        with patch("builtins.print"):
+            with patch("builtins.input", return_value=""):
+                main.main()
+
+        mock_analyze.assert_called_once_with("gitlab-org", "gitlab", platform="gitlab")
+        mock_report.save_report.assert_called_once_with("report text", "gitlab_gitlab-org_gitlab_report.txt")
+
+    @patch("main.menu")
+    @patch("main.analyze_repository")
+    @patch("main.report")
+    def test_main_analyze_github_flow(self, mock_report, mock_analyze, mock_menu):
+        mock_menu.print_banner.return_value = None
+        mock_menu.show_menu.return_value = None
+        mock_menu.get_user_choice.side_effect = ["Analyze a GitHub repository", "Exit"]
+        mock_menu.prompt_repo_input.return_value = ("owner", "repo")
+        mock_menu.prompt_report_format.return_value = "text"
+        mock_menu.confirm_exit.return_value = True
+
+        mock_analyze.return_value = (ANALYSIS_DICT, SCORES_DICT)
+        mock_report.print_summary.return_value = None
+        mock_report.generate_text_report.return_value = "report text"
+        mock_report.save_report.return_value = None
+        mock_report.REPORT_FORMAT_GENERATORS = self._format_map(mock_report)
+
+        with patch("builtins.print"):
+            with patch("builtins.input", return_value=""):
+                main.main()
+
+        mock_analyze.assert_called_once_with("owner", "repo")
+        mock_report.save_report.assert_called_once_with("report text", "github_owner_repo_report.txt")
 
 
 if __name__ == "__main__":

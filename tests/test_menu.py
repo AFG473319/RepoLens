@@ -6,6 +6,7 @@ from menu import (
     show_menu,
     get_user_choice,
     prompt_repo_input,
+    prompt_gitlab_repo_input,
     prompt_report_format,
     prompt_settings,
     confirm_exit,
@@ -177,6 +178,23 @@ class TestPromptRepoInput(unittest.TestCase):
         self.assertEqual(result, ("", ""))
 
 
+class TestPromptGitLabRepoInput(unittest.TestCase):
+    @patch("builtins.input", side_effect=["gitlab-org/gitlab"])
+    def test_prompt_gitlab_repo_input_slash_format(self, mock_input):
+        result = prompt_gitlab_repo_input()
+        self.assertEqual(result, ("gitlab-org", "gitlab"))
+
+    @patch("builtins.input", side_effect=["group/subgroup/project"])
+    def test_prompt_gitlab_repo_input_nested_groups(self, mock_input):
+        result = prompt_gitlab_repo_input()
+        self.assertEqual(result, ("group/subgroup", "project"))
+
+    @patch("builtins.input", side_effect=["mygroup", "myproject"])
+    def test_prompt_gitlab_repo_input_separate_inputs(self, mock_input):
+        result = prompt_gitlab_repo_input()
+        self.assertEqual(result, ("mygroup", "myproject"))
+
+
 class TestPromptReportFormat(unittest.TestCase):
     @patch("builtins.input", return_value="")
     def test_prompt_report_format_enter_returns_default(self, mock_input):
@@ -231,49 +249,59 @@ class TestPromptReportFormat(unittest.TestCase):
 
 
 class TestPromptSettings(unittest.TestCase):
-    @patch("builtins.input", side_effect=["", "", "json", ""])
+    @patch("builtins.input", side_effect=["", "", "", "json", ""])
     def test_prompt_settings_updates_format(self, mock_input):
-        current = {"github_api_key": "key", "cache_directory": "cache", "default_report_format": "html"}
+        current = {"github_api_key": "key", "gitlab_api_key": "", "cache_directory": "cache", "default_report_format": "html"}
 
         updated = prompt_settings(current)
 
         self.assertEqual(updated["default_report_format"], "json")
 
-    @patch("builtins.input", side_effect=["", "", "", ""])
+    @patch("builtins.input", side_effect=["", "", "", "", ""])
     def test_prompt_settings_enter_keeps_current_format(self, mock_input):
-        current = {"github_api_key": "key", "cache_directory": "cache", "default_report_format": "json"}
+        current = {"github_api_key": "key", "gitlab_api_key": "", "cache_directory": "cache", "default_report_format": "json"}
 
         updated = prompt_settings(current)
 
         self.assertEqual(updated["default_report_format"], "json")
 
     @patch("builtins.print")
-    @patch("builtins.input", side_effect=["", "", "pdf", "text", ""])
+    @patch("builtins.input", side_effect=["", "", "", "pdf", "text", ""])
     def test_prompt_settings_invalid_format_reprompts(self, mock_input, mock_print):
-        current = {"github_api_key": "key", "cache_directory": "cache", "default_report_format": "html"}
+        current = {"github_api_key": "key", "gitlab_api_key": "", "cache_directory": "cache", "default_report_format": "html"}
 
         updated = prompt_settings(current)
 
         self.assertEqual(updated["default_report_format"], "text")
-        self.assertEqual(mock_input.call_count, 4)
+        self.assertEqual(mock_input.call_count, 5)
         self.assertTrue(mock_print.called)
 
-    @patch("builtins.input", side_effect=["", "", "HTML", ""])
+    @patch("builtins.input", side_effect=["", "", "", "HTML", ""])
     def test_prompt_settings_normalizes_format_case(self, mock_input):
-        current = {"github_api_key": "key", "cache_directory": "cache", "default_report_format": "html"}
+        current = {"github_api_key": "key", "gitlab_api_key": "", "cache_directory": "cache", "default_report_format": "html"}
 
         updated = prompt_settings(current)
 
         self.assertEqual(updated["default_report_format"], "html")
 
-    @patch("builtins.input", side_effect=["", "", ""])
+    @patch("builtins.input", side_effect=["", "", "", ""])
     def test_prompt_settings_keeps_other_values(self, mock_input):
-        current = {"github_api_key": " secret ", "cache_directory": " /tmp/cache ", "default_report_format": "json"}
+        current = {"github_api_key": " secret ", "gitlab_api_key": " gl_sec ", "cache_directory": " /tmp/cache ", "default_report_format": "json"}
 
         updated = prompt_settings(current)
 
         self.assertEqual(updated["github_api_key"], " secret ")
+        self.assertEqual(updated["gitlab_api_key"], " gl_sec ")
         self.assertEqual(updated["cache_directory"], " /tmp/cache ")
+
+    @patch("builtins.input", side_effect=["new_gh", "new_gl", "/new/cache", "json"])
+    def test_prompt_settings_updates_all_fields(self, mock_input):
+        current = {"github_api_key": "", "gitlab_api_key": "", "cache_directory": "", "default_report_format": "html"}
+        updated = prompt_settings(current)
+        self.assertEqual(updated["github_api_key"], "new_gh")
+        self.assertEqual(updated["gitlab_api_key"], "new_gl")
+        self.assertEqual(updated["cache_directory"], "/new/cache")
+        self.assertEqual(updated["default_report_format"], "json")
 
 
 class TestConfirmExit(unittest.TestCase):

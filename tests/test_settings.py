@@ -27,7 +27,15 @@ class TestSettings(unittest.TestCase):
             values = {"github_api_key": " secret ", "cache_directory": " /tmp/cache "}
             with patch.object(settings, "SETTINGS_PATH", path):
                 settings.save_settings(values)
-                self.assertEqual(settings.load_settings(), {"github_api_key": "secret", "cache_directory": "/tmp/cache", "default_report_format": "html"})
+                self.assertEqual(
+                    settings.load_settings(),
+                    {
+                        "github_api_key": "secret",
+                        "gitlab_api_key": "",
+                        "cache_directory": "/tmp/cache",
+                        "default_report_format": "html",
+                    },
+                )
 
     def test_load_settings_ignores_malformed_json(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -54,10 +62,29 @@ class TestSettings(unittest.TestCase):
     def test_apply_settings_updates_environment_and_cache_directory(self):
         import cache
         with patch.dict(os.environ, {}, clear=True):
-            settings.apply_settings({"github_api_key": "secret", "cache_directory": "cache"})
+            settings.apply_settings({
+                "github_api_key": "secret",
+                "gitlab_api_key": "gl_secret",
+                "cache_directory": "cache",
+            })
             self.assertEqual(os.environ["GITHUB_API_KEY"], "secret")
+            self.assertEqual(os.environ["GITLAB_API_KEY"], "gl_secret")
             self.assertEqual(os.environ["REPOLENS_CACHE_DIR"], "cache")
             self.assertEqual(cache.CACHE_DIR, Path("cache"))
+
+    def test_save_and_load_gitlab_settings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            values = {
+                "github_api_key": "gh_key",
+                "gitlab_api_key": "gl_key",
+                "cache_directory": "/tmp/cache",
+            }
+            with patch.object(settings, "SETTINGS_PATH", path):
+                settings.save_settings(values)
+                loaded = settings.load_settings()
+                self.assertEqual(loaded["gitlab_api_key"], "gl_key")
+                self.assertEqual(loaded["github_api_key"], "gh_key")
 
 
 class TestDefaultReportFormat(unittest.TestCase):

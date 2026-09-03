@@ -4,7 +4,7 @@ import os
 import tempfile
 from unittest.mock import patch, call, MagicMock
 
-import github
+import provider
 from report import (
     generate_text_report,
     generate_json_report,
@@ -76,7 +76,7 @@ class TestGenerateTextReport(unittest.TestCase):
 
         self.assertIn("approximated", result)
         self.assertIn(
-            f"more than {github.MAX_PAGES * github.PER_PAGE} results", result
+            f"more than {provider.MAX_PAGES * provider.PER_PAGE} results", result
         )
         self.assertIn("Truncated endpoints: commits, issues", result)
 
@@ -236,7 +236,7 @@ class TestGenerateHtmlReport(unittest.TestCase):
         result = generate_html_report("pallets", "flask", analysis, self._scores())
 
         self.assertIn("approximate", result)
-        self.assertIn(f"more than {github.MAX_PAGES * github.PER_PAGE:,} results", result)
+        self.assertIn(f"more than {provider.MAX_PAGES * provider.PER_PAGE:,} results", result)
         self.assertIn("commits, issues", result)
 
     def test_no_limitations_when_not_truncated(self):
@@ -522,7 +522,7 @@ class TestPrintSummary(unittest.TestCase):
         calls = [str(call) for call in mock_print.call_args_list]
         self.assertTrue(any("approximate" in call.lower() for call in calls))
         self.assertTrue(
-            any(f"{github.MAX_PAGES * github.PER_PAGE} results" in call
+            any(f"{provider.MAX_PAGES * provider.PER_PAGE} results" in call
                 for call in calls)
         )
         self.assertTrue(any("Truncated endpoints: commits, issues" in call
