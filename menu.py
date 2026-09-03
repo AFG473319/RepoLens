@@ -57,6 +57,13 @@ def prompt_settings(current: dict[str, str]) -> dict[str, str]:
     api_key = input(f"GitHub API key [{masked_key}]: ").strip()
     if not api_key:
         api_key = current_key
+
+    current_gl_key = current.get("gitlab_api_key", "")
+    masked_gl_key = ("*" * min(len(current_gl_key), 8)) if current_gl_key else "not set"
+    gitlab_api_key = input(f"GitLab API key [{masked_gl_key}]: ").strip()
+    if not gitlab_api_key:
+        gitlab_api_key = current_gl_key
+
     cache_directory = input(
         f"Cache directory [{current.get('cache_directory', '')}]: "
     ).strip() or current.get("cache_directory", "")
@@ -64,6 +71,7 @@ def prompt_settings(current: dict[str, str]) -> dict[str, str]:
     report_format = _read_report_format(current_format)
     return {
         "github_api_key": api_key,
+        "gitlab_api_key": gitlab_api_key,
         "cache_directory": cache_directory,
         "default_report_format": report_format,
     }
@@ -78,6 +86,23 @@ def prompt_repo_input() -> tuple[str, str]:
     owner = input("Enter the repository owner: ").strip()
     repo = input("Enter the repository name: ").strip()
     return (owner, repo)
+
+
+def prompt_gitlab_repo_input() -> tuple[str, str]:
+    """Read the namespace and project name of a GitLab repository.
+
+    Accepts 'owner/repo' or 'namespace/subgroup/project' format.
+
+    Returns:
+        A tuple containing the namespace and project name.
+    """
+    raw = input("Enter the GitLab project path (e.g. 'gitlab-org/gitlab' or 'group/subgroup/project'): ").strip()
+    if "/" in raw:
+        namespace, project = raw.rsplit("/", 1)
+        return (namespace.strip(), project.strip())
+    namespace = raw.strip()
+    project = input("Enter the project name: ").strip()
+    return (namespace, project)
 
 
 def _read_report_format(current: str) -> str:

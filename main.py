@@ -5,36 +5,41 @@ import requests
 import dotenv
 import cache
 import menu
-import provider as github
 import analyzer
 import scoring
 import report
 import settings
+import provider
 
 
-def analyze_repository(owner: str, repo: str) -> tuple[dict, dict]:
+def analyze_repository(owner: str, repo: str, platform: str = "github") -> tuple[dict, dict]:
     """Fetch repository data and return its analysis and scores.
 
     Args:
-        owner: GitHub username or organization.
+        owner: Repository owner or namespace.
         repo: Repository name.
+        platform: Platform name ('github' or 'gitlab'). Defaults to 'github'.
 
     Returns:
         A tuple containing the analysis payload and calculated scores.
     """
     dotenv.load_dotenv()
-    api_key = os.getenv("GITHUB_API_KEY")
-    
+    if platform.lower() == "gitlab":
+        api_key = os.getenv("GITLAB_API_KEY")
+    else:
+        api_key = os.getenv("GITHUB_API_KEY")
+
+    platform_display = "GitLab" if platform.lower() == "gitlab" else "GitHub"
     print(f"Fetching repository metadata for {owner}/{repo}...")
-    repo_data = github.get_repo(owner, repo, api_key=api_key)
+    repo_data = provider.get_repo(owner, repo, api_key=api_key, platform=platform)
     print("Fetching commit history...")
-    commits_data, commits_truncated = github.get_commits(owner, repo, api_key)
+    commits_data, commits_truncated = provider.get_commits(owner, repo, api_key=api_key, platform=platform)
     print("Fetching contributors...")
-    contributors_data, contributors_truncated = github.get_contributors(owner, repo, api_key)
+    contributors_data, contributors_truncated = provider.get_contributors(owner, repo, api_key=api_key, platform=platform)
     print("Fetching language breakdown...")
-    languages_data = github.get_languages(owner, repo, api_key)
+    languages_data = provider.get_languages(owner, repo, api_key=api_key, platform=platform)
     print("Fetching issues...")
-    issues_data, issues_truncated = github.get_issues(owner, repo, api_key)
+    issues_data, issues_truncated = provider.get_issues(owner, repo, api_key=api_key, platform=platform)
 
     analysis = {
         "repo": analyzer.analyze_repo(repo_data),
@@ -88,7 +93,13 @@ def main() -> None:
 
     while True:
         menu.print_banner()
-        choices = ["Analyze a repository", "Settings", "Clear cache", "Exit"]
+        choices = [
+            "Analyze a GitHub repository",
+            "Analyze a GitLab repository",
+            "Settings",
+            "Clear cache",
+            "Exit",
+        ]
         menu.show_menu(choices)
         user_choice = menu.get_user_choice(choices)
         
@@ -120,32 +131,41 @@ def main() -> None:
                 return
             continue
         
-        if user_choice == "Analyze a repository":
+        if user_choice in ("Analyze a repository", "Analyze a GitHub repository", "Analyze a GitLab repository"):
+            is_gitlab = (user_choice == "Analyze a GitLab repository")
+            platform = "gitlab" if is_gitlab else "github"
+            platform_display = "GitLab" if is_gitlab else "GitHub"
             try:
-                owner, repo = menu.prompt_repo_input()
+                if is_gitlab:
+                    owner, repo = menu.prompt_gitlab_repo_input()
+                else:
+                    owner, repo = menu.prompt_repo_input()
 
-                # Offer a fresh, complete cache before fetching from GitHub.
-                cached_data = cache.load_cache(owner, repo)
+                # Offer a fresh, complete cache before fetching
+                cached_data = cache.load_cache(owner, repo, platform=platform)
                 use_cache = False
                 if cached_data is not None and cache.is_cache_valid(cached_data) and cache.is_cache_fresh(cached_data):
                     age_str = cache.cache_age_string(cached_data)
                     if menu.prompt_cache_use(owner, repo, age_str):
                         analysis, scores = cached_data["analysis"], cached_data["scores"]
-                        print(f"\nUsing cached data for {owner}/{repo} ({age_str}) — skipping GitHub fetch.")
+                        print(f"\nUsing cached data for {owner}/{repo} ({age_str}) — skipping {platform_display} fetch.")
                         use_cache = True
 
                 if not use_cache:
                     report_format = menu.prompt_report_format(app_settings["default_report_format"])
 
-                    print("\nFetching data from GitHub...")
-                    analysis, scores = analyze_repository(owner, repo)
+                    print(f"\nFetching data from {platform_display}...")
+                    if platform == "gitlab":
+                        analysis, scores = analyze_repository(owner, repo, platform=platform)
+                    else:
+                        analysis, scores = analyze_repository(owner, repo)
 
                     # Cache only complete payloads; incomplete results should not
                     # replace a usable cache entry.
-                    cache_payload = cache.build_cache_payload(owner, repo, analysis, scores)
+                    cache_payload = cache.build_cache_payload(owner, repo, analysis, scores, platform=platform)
                     if cache.is_cache_valid(cache_payload):
                         try:
-                            cache.save_cache(owner, repo, analysis, scores)
+                            cache.save_cache(owner, repo, analysis, scores, platform=platform)
                         except OSError as e:
                             # Cache failure is non-fatal; warn and continue
                             print(f"Warning: could not write cache: {e}")
@@ -159,7 +179,12 @@ def main() -> None:
 
                 generator, extension = report.REPORT_FORMAT_GENERATORS[report_format]
                 report_content = generator(owner, repo, analysis, scores)
-                filename = f"{owner}_{repo}_report{extension}"
+                sanitized_owner = cache._sanitize(owner)
+                sanitized_repo = cache._sanitize(repo)
+                if user_choice == "Analyze a repository":
+                    filename = f"{owner}_{repo}_report{extension}"
+                else:
+                    filename = f"{platform}_{sanitized_owner}_{sanitized_repo}_report{extension}"
                 try:
                     report.save_report(report_content, filename)
                     print(f"\nReport saved to {filename}")

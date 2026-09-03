@@ -45,20 +45,22 @@ def _sanitize(name: str) -> str:
     return sanitized[:100]
 
 
-def _cache_path(owner: str, repo: str, cache_dir: Path | None = None) -> Path:
+def _cache_path(owner: str, repo: str, cache_dir: Path | None = None, platform: str = "github") -> Path:
     """Build the cache-file path for a repository.
 
     Args:
-        owner: GitHub username or organization that owns the repository.
+        owner: Repository owner or namespace.
         repo: Repository name.
         cache_dir: Directory in which to place the cache file. Defaults to
             the configured cache directory.
+        platform: Platform name ('github' or 'gitlab'). Defaults to 'github'.
 
     Returns:
         The path to the repository's cache file.
     """
     directory = cache_dir if cache_dir is not None else CACHE_DIR
-    filename = f"{_sanitize(owner)}_{_sanitize(repo)}{CACHE_SUFFIX}"
+    prefix = f"{_sanitize(platform)}_" if platform else ""
+    filename = f"{prefix}{_sanitize(owner)}_{_sanitize(repo)}{CACHE_SUFFIX}"
     return directory / filename
 
 
@@ -190,15 +192,17 @@ def build_cache_payload(
     analysis: dict,
     scores: dict,
     fetched_at: datetime | None = None,
+    platform: str = "github",
 ) -> dict:
     """Build the canonical cache payload for an analysis.
 
     Args:
-        owner: GitHub username or organization that owns the repository.
+        owner: Repository owner or namespace.
         repo: Repository name.
         analysis: Analyzed repository data.
         scores: Calculated repository scores.
         fetched_at: Timestamp to store; defaults to the current UTC time.
+        platform: Platform name ('github' or 'gitlab'). Defaults to 'github'.
 
     Returns:
         A cache payload suitable for validation or persistence.
@@ -206,6 +210,7 @@ def build_cache_payload(
     timestamp = fetched_at if fetched_at is not None else _now()
     return {
         "version": CACHE_VERSION,
+        "platform": platform,
         "owner": owner,
         "repo": repo,
         "fetched_at": timestamp.isoformat(),
@@ -231,6 +236,8 @@ def is_cache_valid(data: dict) -> bool:
     if not isinstance(data.get("owner"), str) or not data.get("owner"):
         return False
     if not isinstance(data.get("repo"), str) or not data.get("repo"):
+        return False
+    if not isinstance(data.get("platform", "github"), str) or not data.get("platform", "github"):
         return False
     fetched_at = _parse_iso(data.get("fetched_at", "")) if isinstance(data.get("fetched_at"), str) else None
     if fetched_at is None:
@@ -317,14 +324,15 @@ def cache_age_string(data: dict, now: datetime | None = None) -> str:
     return f"on {fetched_at.strftime('%Y-%m-%d %H:%M UTC')}"
 
 
-def load_cache(owner: str, repo: str, cache_dir: Path | None = None) -> dict | None:
+def load_cache(owner: str, repo: str, cache_dir: Path | None = None, platform: str = "github") -> dict | None:
     """Load a repository cache from the requested or tracked directories.
 
     Args:
-        owner: GitHub username or organization that owns the repository.
+        owner: Repository owner or namespace.
         repo: Repository name.
         cache_dir: Directory to search first. When omitted, the active and
             registered directories are searched.
+        platform: Platform name ('github' or 'gitlab'). Defaults to 'github'.
 
     Returns:
         The decoded cache payload, or ``None`` when no readable cache exists.
@@ -335,16 +343,33 @@ def load_cache(owner: str, repo: str, cache_dir: Path | None = None) -> dict | N
     else:
         directories = _tracked_cache_directories()
     for directory in directories:
-        path = _cache_path(owner, repo, directory)
+        path = _cache_path(owner, repo, directory, platform=platform)
         try:
             with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError):
-            continue
+            pass
+
+        # Check legacy un-prefixed filename for backwards compatibility
+        if platform.lower() == "github":
+            legacy_path = directory / f"{_sanitize(owner)}_{_sanitize(repo)}{CACHE_SUFFIX}"
+            try:
+                with open(legacy_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, OSError):
+                pass
     return None
 
 
-def save_cache(owner: str, repo: str, analysis: dict, scores: dict, cache_dir: Path | None = None, fetched_at: datetime | None = None) -> Path:
+def save_cache(
+    owner: str,
+    repo: str,
+    analysis: dict,
+    scores: dict,
+    cache_dir: Path | None = None,
+    fetched_at: datetime | None = None,
+    platform: str = "github",
+) -> Path:
     """Atomically persist an analysis and its scores for a repository.
 
     Returns:
@@ -352,8 +377,8 @@ def save_cache(owner: str, repo: str, analysis: dict, scores: dict, cache_dir: P
     """
     directory = cache_dir if cache_dir is not None else CACHE_DIR
     directory.mkdir(parents=True, exist_ok=True)
-    path = _cache_path(owner, repo, directory)
-    payload = build_cache_payload(owner, repo, analysis, scores, fetched_at)
+    path = _cache_path(owner, repo, directory, platform=platform)
+    payload = build_cache_payload(owner, repo, analysis, scores, fetched_at, platform=platform)
     # atomic: write temp then replace
     tmp = path.with_suffix(".tmp")
     try:
@@ -376,14 +401,15 @@ def save_cache(owner: str, repo: str, analysis: dict, scores: dict, cache_dir: P
     return path
 
 
-def clear_cache(owner: str, repo: str, cache_dir: Path | None = None) -> bool:
+def clear_cache(owner: str, repo: str, cache_dir: Path | None = None, platform: str = "github") -> bool:
     """Remove a repository cache file from the requested or tracked directories.
 
     Args:
-        owner: GitHub username or organization that owns the repository.
+        owner: Repository owner or namespace.
         repo: Repository name.
         cache_dir: Directory to search exclusively. When omitted, all tracked
             directories are searched.
+        platform: Platform name ('github' or 'gitlab'). Defaults to 'github'.
 
     Returns:
         ``True`` when at least one cache file is removed; otherwise ``False``.
@@ -392,12 +418,20 @@ def clear_cache(owner: str, repo: str, cache_dir: Path | None = None) -> bool:
     removed = False
     for directory in directories:
         try:
-            path = _cache_path(owner, repo, directory)
+            path = _cache_path(owner, repo, directory, platform=platform)
             if path.exists():
                 path.unlink()
                 removed = True
         except OSError:
-            continue
+            pass
+        if platform.lower() == "github":
+            legacy_path = directory / f"{_sanitize(owner)}_{_sanitize(repo)}{CACHE_SUFFIX}"
+            try:
+                if legacy_path.exists():
+                    legacy_path.unlink()
+                    removed = True
+            except OSError:
+                pass
     return removed
 
 
