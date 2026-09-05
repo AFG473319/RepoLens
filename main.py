@@ -185,10 +185,10 @@ def main() -> None:
                     report_format = menu.prompt_report_format(app_settings["default_report_format"])
                 
                 print("\n")
-                report.print_summary(scores, analysis)
+                report.print_summary(scores, analysis, platform=platform)
 
                 generator, extension = report.REPORT_FORMAT_GENERATORS[report_format]
-                report_content = generator(owner, repo, analysis, scores)
+                report_content = generator(owner, repo, analysis, scores, platform=platform)
                 sanitized_owner = cache._sanitize(owner)
                 sanitized_repo = cache._sanitize(repo)
                 if user_choice == "Analyze a repository":

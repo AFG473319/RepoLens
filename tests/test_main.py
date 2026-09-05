@@ -329,7 +329,7 @@ class TestMain(unittest.TestCase):
         mock_analyze.assert_called_once_with("owner", "repo")
         mock_report.print_summary.assert_called_once()
         mock_report.generate_text_report.assert_called_once_with(
-            "owner", "repo", ANALYSIS_DICT, SCORES_DICT
+            "owner", "repo", ANALYSIS_DICT, SCORES_DICT, platform="github"
         )
         mock_report.save_report.assert_called_once_with("report text", "owner_repo_report.txt")
 
@@ -361,7 +361,7 @@ class TestMain(unittest.TestCase):
 
         mock_menu.prompt_report_format.assert_called_with("html")
         mock_report.generate_html_report.assert_called_once_with(
-            "owner", "repo", ANALYSIS_DICT, SCORES_DICT
+            "owner", "repo", ANALYSIS_DICT, SCORES_DICT, platform="github"
         )
 
     @patch("main.menu")
@@ -422,7 +422,7 @@ class TestMain(unittest.TestCase):
                 main.main()
 
         mock_report.generate_json_report.assert_called_once_with(
-            "owner", "repo", ANALYSIS_DICT, SCORES_DICT
+            "owner", "repo", ANALYSIS_DICT, SCORES_DICT, platform="github"
         )
         mock_report.generate_text_report.assert_not_called()
         mock_report.save_report.assert_called_once_with(
@@ -446,7 +446,7 @@ class TestMain(unittest.TestCase):
                 main.main()
 
         mock_report.generate_html_report.assert_called_once_with(
-            "owner", "repo", ANALYSIS_DICT, SCORES_DICT
+            "owner", "repo", ANALYSIS_DICT, SCORES_DICT, platform="github"
         )
         mock_report.generate_text_report.assert_not_called()
         mock_report.generate_json_report.assert_not_called()
@@ -472,7 +472,7 @@ class TestMain(unittest.TestCase):
 
         mock_report.generate_json_report.assert_not_called()
         mock_report.generate_text_report.assert_called_once_with(
-            "owner", "repo", ANALYSIS_DICT, SCORES_DICT
+            "owner", "repo", ANALYSIS_DICT, SCORES_DICT, platform="github"
         )
         mock_report.save_report.assert_called_once_with(
             "report text", "owner_repo_report.txt"

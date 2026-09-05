@@ -427,8 +427,10 @@ class TestGenerateJsonReport(unittest.TestCase):
             {
                 "analysis": analysis,
                 "scores": scores,
+                "platform": "GitHub",
                 "approximate": False,
                 "truncated_endpoints": [],
+                "language_error": False,
             },
         )
 
@@ -440,8 +442,10 @@ class TestGenerateJsonReport(unittest.TestCase):
             {
                 "analysis": {},
                 "scores": {},
+                "platform": "GitHub",
                 "approximate": False,
                 "truncated_endpoints": [],
+                "language_error": False,
             },
         )
 
@@ -546,6 +550,59 @@ class TestPrintSummary(unittest.TestCase):
 
         calls = [str(call) for call in mock_print.call_args_list]
         self.assertFalse(any("Warning" in call for call in calls))
+
+
+
+class TestPlatformAwareWording(unittest.TestCase):
+    """F4/F2: reports must name the right platform and flag missing languages."""
+
+    def _analysis(self, **extra):
+        analysis = {
+            "repo": {"name": "test", "stars": 1, "forks": 1, "language": "Python"},
+            "commits": {"total_commits": 1},
+            "contributors": {"total_contributors": 1},
+            "languages": {"primary_language": "Python", "language_count": 1},
+            "issues": {"total_issues": 0},
+            "approximate": True,
+            "truncated_endpoints": ["commits"],
+        }
+        analysis.update(extra)
+        return analysis
+
+    def _scores(self):
+        return {"health_score": 80.0, "grade": "B"}
+
+    def test_text_report_names_gitlab_endpoints(self):
+        result = generate_text_report(self._analysis(), self._scores(), platform="gitlab")
+        self.assertIn("one or more GitLab endpoints", result)
+
+    def test_text_report_defaults_to_github(self):
+        result = generate_text_report(self._analysis(), self._scores())
+        self.assertIn("one or more GitHub endpoints", result)
+
+    def test_text_report_notes_language_error(self):
+        result = generate_text_report(self._analysis(language_error=True), self._scores())
+        self.assertIn("Language data could not be fetched", result)
+
+    def test_summary_names_gitlab_endpoints(self):
+        with patch("builtins.print") as mock_print:
+            print_summary(self._scores(), self._analysis(), platform="gitlab")
+        outputs = " ".join(str(c) for c in mock_print.call_args_list)
+        self.assertIn("GitLab endpoints", outputs)
+
+    def test_summary_warns_about_language_error(self):
+        with patch("builtins.print") as mock_print:
+            print_summary(self._scores(), self._analysis(language_error=True))
+        outputs = " ".join(str(c) for c in mock_print.call_args_list)
+        self.assertIn("language data could not be fetched", outputs)
+
+    def test_html_report_names_gitlab_endpoints(self):
+        result = generate_html_report("g", "p", self._analysis(), self._scores(), platform="gitlab")
+        self.assertIn("GitLab endpoints", result)
+
+    def test_html_report_notes_language_error(self):
+        result = generate_html_report("g", "p", self._analysis(language_error=True), self._scores())
+        self.assertIn("Language data unavailable", result)
 
 
 if __name__ == "__main__":

@@ -12,12 +12,18 @@ import provider
 SUPPORTED_REPORT_FORMATS = ("text", "json", "html")
 
 
-def generate_text_report(analysis: dict, scores: dict) -> str:
+def _platform_noun(platform: str) -> str:
+    """Human-readable platform name for report wording."""
+    return "GitLab" if (platform or "").lower() == "gitlab" else "GitHub"
+
+
+def generate_text_report(analysis: dict, scores: dict, platform: str = "github") -> str:
     """Generate a plain text report from analysis and scores.
 
     Args:
         analysis: Dictionary containing analyzed metrics.
         scores: Dictionary containing calculated scores.
+        platform: Platform the data was fetched from ('github' or 'gitlab').
 
     Returns:
         Formatted text report as a string.
@@ -27,18 +33,23 @@ def generate_text_report(analysis: dict, scores: dict) -> str:
     contributors = analysis.get("contributors", {})
     languages = analysis.get("languages", {})
     issues = analysis.get("issues", {})
+    notes = ""
     if analysis.get("approximate", False):
         limit = provider.MAX_PAGES * provider.PER_PAGE
-        approximate = (
-            "\nNote: This report is approximated because one or more GitHub"
+        noun = _platform_noun(platform)
+        notes = (
+            f"\nNote: This report is approximated because one or more {noun}"
             f" endpoints returned more than {limit} results, so counts are"
             " lower bounds.\n"
         )
         truncated_endpoints = ", ".join(analysis.get("truncated_endpoints", []))
         if truncated_endpoints:
-            approximate += f"Truncated endpoints: {truncated_endpoints}\n"
-    else:
-        approximate = ""
+            notes += f"Truncated endpoints: {truncated_endpoints}\n"
+    if analysis.get("language_error", False):
+        notes += (
+            "\nNote: Language data could not be fetched, so language metrics"
+            " are missing from this report.\n"
+        )
 
     return (
         "RepoLens Analysis Report\n"
@@ -70,17 +81,18 @@ def generate_text_report(analysis: dict, scores: dict) -> str:
         + f"  Community score: {scores.get('community_score', 0)}\n"
         + f"  Maintainability score: {scores.get('maintainability_score', 0)}\n"
         + f"  Grade: {scores.get('grade', 'N/A')}\n"
-        + f"{approximate}"
+        + f"{notes}"
     )
 
 
-def generate_json_report(analysis: dict, scores: dict) -> str:
+def generate_json_report(analysis: dict, scores: dict, platform: str = "github") -> str:
     """
     Generate a JSON formatted report.
 
     Args:
         analysis: Dictionary containing analyzed metrics.
         scores: Dictionary containing calculated scores.
+        platform: Platform the data was fetched from ('github' or 'gitlab').
 
     Returns:
         JSON string of the report.
@@ -88,11 +100,13 @@ def generate_json_report(analysis: dict, scores: dict) -> str:
     data = {
         "analysis": analysis,
         "scores": scores,
+        "platform": _platform_noun(platform),
         # Always present so consumers of the JSON schema can rely on
         # these keys regardless of which pipeline version produced
         # the analysis payload.
         "approximate": bool(analysis.get("approximate", False)),
         "truncated_endpoints": list(analysis.get("truncated_endpoints", [])),
+        "language_error": bool(analysis.get("language_error", False)),
     }
     return json.dumps(data, indent=4)
 
@@ -109,7 +123,7 @@ def save_report(report_content: str, filename: str) -> None:
         file_handle.write(report_content)
 
 
-def print_summary(scores: dict, analysis: dict | None = None) -> None:
+def print_summary(scores: dict, analysis: dict | None = None, platform: str = "github") -> None:
     """Print a brief summary of scores to the console.
 
     Args:
@@ -118,6 +132,7 @@ def print_summary(scores: dict, analysis: dict | None = None) -> None:
             was capped ("approximate" is truthy), a warning listing the
             truncated endpoints is printed after the scores so counts
             are not mistaken for exact totals.
+        platform: Platform the data was fetched from, used in warnings.
     """
     print("Summary")
     print(f"  Health score: {scores.get('health_score')}")
@@ -127,12 +142,18 @@ def print_summary(scores: dict, analysis: dict | None = None) -> None:
         limit = provider.MAX_PAGES * provider.PER_PAGE
         truncated_endpoints = ", ".join(analysis.get("truncated_endpoints", []))
         message = (
-            "\nWarning: counts are approximate because one or more GitHub"
-            f" endpoints returned more than {limit} results."
+            f"\nWarning: counts are approximate because one or more "
+            f"{_platform_noun(platform)} endpoints returned more than {limit} results."
         )
         if truncated_endpoints:
             message += f"\nTruncated endpoints: {truncated_endpoints}"
         print(message)
+
+    if analysis and analysis.get("language_error", False):
+        print(
+            "\nWarning: language data could not be fetched; "
+            "language metrics are missing from this report."
+        )
 
 
 _GRADE_BANDS = (
@@ -647,7 +668,13 @@ $limits_body
 """)
 
 
-def generate_html_report(owner: str, repo_name: str, analysis: dict, scores: dict) -> str:
+def generate_html_report(
+    owner: str,
+    repo_name: str,
+    analysis: dict,
+    scores: dict,
+    platform: str = "github",
+) -> str:
     """Generate a self-contained interactive HTML report.
 
     The output is a single file with inline CSS/JS and no external
@@ -659,6 +686,7 @@ def generate_html_report(owner: str, repo_name: str, analysis: dict, scores: dic
         repo_name: Repository name.
         analysis: Dictionary containing analyzed metrics.
         scores: Dictionary containing calculated scores.
+        platform: Platform the data was fetched from ('github' or 'gitlab').
 
     Returns:
         Formatted HTML report as a string.
@@ -748,13 +776,21 @@ def generate_html_report(owner: str, repo_name: str, analysis: dict, scores: dic
         )
         limits_body = (
             '<p class="limit-title">Some counts are approximate lower bounds</p>'
-            f"<p>One or more GitHub endpoints returned more than {limit:,} results; "
+            f"<p>One or more {_platform_noun(platform)} endpoints returned "
+            f"more than {limit:,} results; "
             "deeper history was not fetched."
             + (f" Truncated endpoints: {truncated}." if truncated else "")
             + "</p>"
         )
     else:
         limits_body = '<p>No pagination truncation detected — all counts are exact.</p>'
+
+    if analysis.get("language_error", False):
+        limits_body += (
+            '<p class="limit-title">Language data unavailable</p>'
+            "<p>The languages endpoint could not be reached, so language "
+            "metrics are missing from this report.</p>"
+        )
 
     raw_grade = scores.get("grade")
     if not (isinstance(raw_grade, str) and raw_grade.strip().upper() in {"A", "B", "C", "D", "F"}):
@@ -786,12 +822,16 @@ def generate_html_report(owner: str, repo_name: str, analysis: dict, scores: dic
 # Data-driven dispatch: each supported format maps to a generator callable
 # and the file extension used when saving the report. The adapters keep the
 # registry's common call signature without hiding the behavior in lambdas.
-def _generate_text_report(owner: str, repo: str, analysis: dict, scores: dict) -> str:
-    return generate_text_report(analysis, scores)
+def _generate_text_report(
+    owner: str, repo: str, analysis: dict, scores: dict, platform: str = "github"
+) -> str:
+    return generate_text_report(analysis, scores, platform=platform)
 
 
-def _generate_json_report(owner: str, repo: str, analysis: dict, scores: dict) -> str:
-    return generate_json_report(analysis, scores)
+def _generate_json_report(
+    owner: str, repo: str, analysis: dict, scores: dict, platform: str = "github"
+) -> str:
+    return generate_json_report(analysis, scores, platform=platform)
 
 
 REPORT_FORMAT_GENERATORS = {
