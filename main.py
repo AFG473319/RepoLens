@@ -141,7 +141,7 @@ def main() -> None:
                 return
             continue
         
-        if user_choice in ("Analyze a repository", "Analyze a GitHub repository", "Analyze a GitLab repository"):
+        if user_choice in ("Analyze a GitHub repository", "Analyze a GitLab repository"):
             is_gitlab = (user_choice == "Analyze a GitLab repository")
             platform = "gitlab" if is_gitlab else "github"
             platform_display = "GitLab" if is_gitlab else "GitHub"
@@ -191,10 +191,7 @@ def main() -> None:
                 report_content = generator(owner, repo, analysis, scores, platform=platform)
                 sanitized_owner = cache._sanitize(owner)
                 sanitized_repo = cache._sanitize(repo)
-                if user_choice == "Analyze a repository":
-                    filename = f"{owner}_{repo}_report{extension}"
-                else:
-                    filename = f"{platform}_{sanitized_owner}_{sanitized_repo}_report{extension}"
+                filename = f"{platform}_{sanitized_owner}_{sanitized_repo}_report{extension}"
                 try:
                     report.save_report(report_content, filename)
                     print(f"\nReport saved to {filename}")
