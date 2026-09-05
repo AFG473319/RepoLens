@@ -349,21 +349,32 @@ def get_repo(
 
     Normalizes output to include keys expected by analyzer:
     'name', 'description', 'stargazers_count', 'forks_count', 'language'.
+    On the GitLab path the full language percentage map is also included
+    under 'languages' (None when the languages fetch failed), so callers
+    can reuse it without a second request.
     """
     if platform.lower() == "gitlab":
         project_encoded = _gitlab_project_path(owner, repo)
         url = f"{GITLAB_API_BASE}/projects/{project_encoded}{endpoint}"
         raw = _fetch_gitlab(url, api_key=api_key, expected_type=dict).json()
 
-        # Primary language isn't present in GitLab project metadata;
-        # fetch languages to identify the primary language for maintainability score.
+        # Primary language isn't present in GitLab project metadata; fetch
+        # the languages map once — it identifies the primary language for
+        # the maintainability score and is returned in full so
+        # analyze_repository can reuse it without a second request.
+        languages = None
         language = None
         try:
             languages = get_languages(owner, repo, api_key=api_key, platform="gitlab")
             if languages and isinstance(languages, dict):
                 language = max(languages, key=languages.get)
-        except Exception:
-            language = None
+        except (requests.exceptions.RequestException, TypeError) as e:
+            print(
+                f"Warning: could not fetch language breakdown for "
+                f"{owner}/{repo}; language metrics will be missing ({e}).",
+                file=sys.stderr,
+            )
+            languages = None
 
         return {
             "name": raw.get("name"),
@@ -372,11 +383,12 @@ def get_repo(
             "stars": raw.get("star_count", 0),
             "forks_count": raw.get("forks_count", 0),
             "language": language,
+            "languages": languages,
         }
 
     # GitHub
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}{endpoint}"
-    return _fetch(url, api_key=api_key).json()
+    return _fetch(url, api_key=api_key, expected_type=dict).json()
 
 
 def get_commits(
@@ -491,7 +503,7 @@ def get_issues(
         project_encoded = _gitlab_project_path(owner, repo)
         try:
             issues, truncated = _paginate_gitlab(
-                project_encoded, "/issues?scope=all", api_key=api_key
+                project_encoded, "/issues", api_key=api_key
             )
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code in (404, 409):

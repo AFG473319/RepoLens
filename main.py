@@ -29,15 +29,24 @@ def analyze_repository(owner: str, repo: str, platform: str = "github") -> tuple
     else:
         api_key = os.getenv("GITHUB_API_KEY")
 
-    platform_display = "GitLab" if platform.lower() == "gitlab" else "GitHub"
     print(f"Fetching repository metadata for {owner}/{repo}...")
     repo_data = provider.get_repo(owner, repo, api_key=api_key, platform=platform)
     print("Fetching commit history...")
     commits_data, commits_truncated = provider.get_commits(owner, repo, api_key=api_key, platform=platform)
     print("Fetching contributors...")
     contributors_data, contributors_truncated = provider.get_contributors(owner, repo, api_key=api_key, platform=platform)
-    print("Fetching language breakdown...")
-    languages_data = provider.get_languages(owner, repo, api_key=api_key, platform=platform)
+    language_error = False
+    if platform.lower() == "gitlab":
+        # get_repo fetched the languages map itself (GitLab metadata has no
+        # language field); None signals the fetch failed — the provider
+        # already warned, so degrade to an empty map and flag the report.
+        languages_data = repo_data.pop("languages", None)
+        if languages_data is None:
+            language_error = True
+            languages_data = {}
+    else:
+        print("Fetching language breakdown...")
+        languages_data = provider.get_languages(owner, repo, api_key=api_key, platform=platform)
     print("Fetching issues...")
     issues_data, issues_truncated = provider.get_issues(owner, repo, api_key=api_key, platform=platform)
 
@@ -62,6 +71,7 @@ def analyze_repository(owner: str, repo: str, platform: str = "github") -> tuple
     ]
     analysis["approximate"] = bool(truncated_endpoints)
     analysis["truncated_endpoints"] = truncated_endpoints
+    analysis["language_error"] = language_error
 
     health_score = scoring.calculate_health_score(analysis)
     

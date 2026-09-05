@@ -232,8 +232,60 @@ class TestAnalyzeRepository(unittest.TestCase):
                 "issues",
                 "approximate",
                 "truncated_endpoints",
+                "language_error",
             },
         )
+
+
+    @patch("main.provider")
+    @patch("main.analyzer")
+    @patch("main.scoring")
+    def test_gitlab_reuses_languages_from_get_repo(self, mock_scoring, mock_analyzer, mock_provider):
+        mock_provider.get_repo.return_value = {"name": "proj", "languages": {"Python": 90.0}}
+        mock_provider.get_commits.return_value = ([], False)
+        mock_provider.get_contributors.return_value = ([], False)
+        mock_provider.get_issues.return_value = ([], False)
+        mock_analyzer.analyze_repo.return_value = {}
+        mock_analyzer.analyze_commits.return_value = {}
+        mock_analyzer.analyze_contributors.return_value = {}
+        mock_analyzer.analyze_languages.return_value = {}
+        mock_analyzer.analyze_issues.return_value = {}
+        mock_scoring.calculate_health_score.return_value = 0.0
+        mock_scoring.calculate_activity_score.return_value = 0.0
+        mock_scoring.calculate_community_score.return_value = 0.0
+        mock_scoring.calculate_maintainability_score.return_value = 0.0
+        mock_scoring.grade_score.return_value = "F"
+
+        analysis, _ = main.analyze_repository("owner", "repo", platform="gitlab")
+
+        mock_provider.get_languages.assert_not_called()
+        mock_analyzer.analyze_languages.assert_called_once_with({"Python": 90.0})
+        self.assertFalse(analysis["language_error"])
+
+    @patch("main.provider")
+    @patch("main.analyzer")
+    @patch("main.scoring")
+    def test_gitlab_language_failure_flags_report(self, mock_scoring, mock_analyzer, mock_provider):
+        mock_provider.get_repo.return_value = {"name": "proj", "languages": None}
+        mock_provider.get_commits.return_value = ([], False)
+        mock_provider.get_contributors.return_value = ([], False)
+        mock_provider.get_issues.return_value = ([], False)
+        mock_analyzer.analyze_repo.return_value = {}
+        mock_analyzer.analyze_commits.return_value = {}
+        mock_analyzer.analyze_contributors.return_value = {}
+        mock_analyzer.analyze_languages.return_value = {}
+        mock_analyzer.analyze_issues.return_value = {}
+        mock_scoring.calculate_health_score.return_value = 0.0
+        mock_scoring.calculate_activity_score.return_value = 0.0
+        mock_scoring.calculate_community_score.return_value = 0.0
+        mock_scoring.calculate_maintainability_score.return_value = 0.0
+        mock_scoring.grade_score.return_value = "F"
+
+        analysis, _ = main.analyze_repository("owner", "repo", platform="gitlab")
+
+        mock_provider.get_languages.assert_not_called()
+        mock_analyzer.analyze_languages.assert_called_once_with({})
+        self.assertTrue(analysis["language_error"])
 
 
 class TestMain(unittest.TestCase):

@@ -43,11 +43,11 @@ class TestGetRepo(unittest.TestCase):
     def test_get_repo_with_endpoint(self, mock_get):
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = []
+        mock_response.json.return_value = {"name": "test-repo"}
         mock_get.return_value = mock_response
 
         result = github.get_repo("owner", "repo", endpoint="/commits")
-        self.assertEqual(result, [])
+        self.assertEqual(result, {"name": "test-repo"})
         mock_get.assert_called_once_with(
             "https://api.github.com/repos/owner/repo/commits", headers={}, timeout=10
         )

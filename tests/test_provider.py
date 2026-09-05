@@ -187,6 +187,9 @@ class TestGitLabRateLimiting(unittest.TestCase):
 
         self.assertEqual(result.status_code, 200)
         mock_sleep.assert_called_once_with(5)
+
+
+
 class TestGitLabFetchGuards(unittest.TestCase):
     """F3/F5/F8: GitLab fetch guards parity with the GitHub path."""
 
@@ -222,6 +225,42 @@ class TestGitLabFetchGuards(unittest.TestCase):
         self.assertTrue(truncated)
         self.assertIn("g/p/x", fake_err.getvalue())
         self.assertNotIn("g%2Fp", fake_err.getvalue())
+
+
+class TestGitLabGetRepoLanguages(unittest.TestCase):
+    """F1/F2: get_repo owns the single languages fetch and signals failure."""
+
+    @patch("provider.get_languages")
+    @patch("provider.requests.get")
+    def test_get_repo_gitlab_includes_languages_map(self, mock_get, mock_get_languages):
+        mock_get.return_value = _mock_response({"name": "proj", "star_count": 1, "forks_count": 1})
+        mock_get_languages.return_value = {"Python": 80.0, "HTML": 20.0}
+
+        result = provider.get_repo("group", "proj", platform="gitlab")
+
+        self.assertEqual(result["languages"], {"Python": 80.0, "HTML": 20.0})
+        self.assertEqual(result["language"], "Python")
+
+    @patch("provider.get_languages")
+    @patch("provider.requests.get")
+    def test_get_repo_gitlab_language_failure_sets_none_and_warns(self, mock_get, mock_get_languages):
+        mock_get.return_value = _mock_response({"name": "proj"})
+        mock_get_languages.side_effect = requests.exceptions.ConnectionError("boom")
+
+        with patch("sys.stderr", new=io.StringIO()) as fake_err:
+            result = provider.get_repo("group", "proj", platform="gitlab")
+
+        self.assertIsNone(result["languages"])
+        self.assertIsNone(result["language"])
+        self.assertIn("could not fetch language breakdown", fake_err.getvalue())
+
+    @patch("provider.requests.get")
+    def test_get_issues_gitlab_requests_scopeless_url(self, mock_get):
+        mock_get.return_value = _mock_response([])
+        provider.get_issues("group", "repo", platform="gitlab")
+        url = mock_get.call_args[0][0]
+        self.assertIn("/issues?per_page=100", url)
+        self.assertNotIn("scope=", url)
 
 
 if __name__ == "__main__":
