@@ -279,7 +279,25 @@ def _fetch_gitlab(
                 time.sleep(wait)
                 continue
 
+        if response.status_code == 404:
+            raise requests.exceptions.HTTPError(
+                f"GitLab could not find {url} (404 Not Found). Make sure the "
+                "project exists and you have access to it — private projects "
+                "look missing unless your token (GITLAB_API_KEY, read_api "
+                "scope) can see them.",
+                response=response,
+            )
+        if response.status_code == 403:
+            raise requests.exceptions.HTTPError(
+                f"GitLab refused access to {url} (403 Forbidden). Make sure "
+                "you have access to the project — if it is private, set "
+                "GITLAB_API_KEY to a token with read_api scope.",
+                response=response,
+            )
+
         response.raise_for_status()
+        if response.status_code == 204:
+            return response
         if expected_type is not None:
             _validate_type(response.json(), expected_type)
         return response
@@ -299,6 +317,8 @@ def _paginate_gitlab(
     while url and page_count < MAX_PAGES:
         page_count += 1
         response = _fetch_gitlab(url, api_key=api_key, expected_type=list)
+        if response.status_code == 204:
+            return [], False
         data = response.json()
         items.extend(data)
         url = response.links.get("next", {}).get("url")
@@ -306,7 +326,8 @@ def _paginate_gitlab(
     truncated = bool(url)
     if truncated:
         print(
-            f"Warning: {project_encoded}{endpoint} has more than {MAX_PAGES * PER_PAGE} results; "
+            f"Warning: {urllib.parse.unquote(project_encoded)}{endpoint} "
+            f"has more than {MAX_PAGES * PER_PAGE} results; "
             "counts may be approximate.",
             file=sys.stderr,
         )
@@ -421,6 +442,9 @@ def get_contributors(
 
         # Normalize GitLab contributors:
         # { "login": name, "contributions": commits }
+        # GitLab's contributors endpoint exposes no username, so "login"
+        # is the display name — two contributors sharing a name collapse
+        # in the unique-author count (analyzer keys unique authors by name).
         normalized = [
             {
                 "login": c.get("name"),

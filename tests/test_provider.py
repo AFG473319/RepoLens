@@ -1,3 +1,4 @@
+import io
 import unittest
 from unittest.mock import patch, MagicMock
 import requests
@@ -186,6 +187,41 @@ class TestGitLabRateLimiting(unittest.TestCase):
 
         self.assertEqual(result.status_code, 200)
         mock_sleep.assert_called_once_with(5)
+class TestGitLabFetchGuards(unittest.TestCase):
+    """F3/F5/F8: GitLab fetch guards parity with the GitHub path."""
+
+    @patch("provider.requests.get")
+    def test_fetch_gitlab_404_raises_actionable_error(self, mock_get):
+        mock_get.return_value = _mock_response({}, status_code=404)
+        with self.assertRaises(requests.exceptions.HTTPError) as ctx:
+            provider._fetch_gitlab("https://gitlab.com/api/v4/projects/nope")
+        self.assertIn("Make sure the project exists and you have access", str(ctx.exception))
+
+    @patch("provider.requests.get")
+    def test_fetch_gitlab_403_raises_actionable_error(self, mock_get):
+        mock_get.return_value = _mock_response({}, status_code=403)
+        with self.assertRaises(requests.exceptions.HTTPError) as ctx:
+            provider._fetch_gitlab("https://gitlab.com/api/v4/projects/private")
+        self.assertIn("Make sure you have access to the project", str(ctx.exception))
+        self.assertIn("GITLAB_API_KEY", str(ctx.exception))
+
+    @patch("provider.requests.get")
+    def test_paginate_gitlab_maps_204_to_empty_list(self, mock_get):
+        mock_get.return_value = _mock_response(None, status_code=204)
+        items, truncated = provider._paginate_gitlab("group%2Fproj", "/repository/contributors")
+        self.assertEqual(items, [])
+        self.assertFalse(truncated)
+
+    @patch("provider.requests.get")
+    def test_paginate_gitlab_truncation_warning_decodes_path(self, mock_get):
+        page = _mock_response([{"id": 1}], next_url="https://gitlab.com/api/v4/projects/g%2Fp/x?page=2")
+        mock_get.return_value = page
+        with patch.object(provider, "MAX_PAGES", 1):
+            with patch("sys.stderr", new=io.StringIO()) as fake_err:
+                _, truncated = provider._paginate_gitlab("g%2Fp", "/x")
+        self.assertTrue(truncated)
+        self.assertIn("g/p/x", fake_err.getvalue())
+        self.assertNotIn("g%2Fp", fake_err.getvalue())
 
 
 if __name__ == "__main__":
