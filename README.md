@@ -7,7 +7,7 @@
 
 > Analyze any GitHub or GitLab repository and get a health report from the command line.
 
-RepoLens fetches repository data from the GitHub or GitLab REST API — metadata, commits, contributors, languages, and issues — scores it across three dimensions, and saves the report as **Text**, **JSON**, or an **interactive HTML page**. Fresh results are cached locally so repeat analyses don't burn your rate limit.
+RepoLens fetches repository data from the GitHub or GitLab REST API — metadata, commits, contributors, languages, and issues — scores it across three dimensions, and saves the report as **Text**, **JSON**, **Markdown**, or an **interactive HTML page**. Fresh results are cached locally so repeat analyses don't burn your rate limit.
 
 ---
 
@@ -35,7 +35,7 @@ RepoLens fetches repository data from the GitHub or GitLab REST API — metadata
 - **Repository analysis** — pulls metadata, commit history, contributors, language breakdown, and issues in a single run
 - **GitHub and GitLab** — one workflow for both platforms; GitLab projects are addressed by namespace and path (nested groups supported), with per-platform normalization of commits, contributors, and issue states
 - **Three-dimension scoring** — Activity, Community, and Maintainability (0–100 each), averaged into a health score with an A–F letter grade
-- **Three report formats** — `.txt` for quick reading, `.json` for tooling, and a single self-contained `.html` with score bars, expandable grade rulers, metric filtering, a theme toggle, and keyboard shortcuts (no external requests — renders offline and prints cleanly)
+- **Four report formats** — `.txt` for quick reading, `.json` for tooling, `.md` for readable diffable docs, and a single self-contained `.html` with score bars, expandable grade rulers, metric filtering, a theme toggle, and keyboard shortcuts (no external requests — renders offline and prints cleanly)
 - **Interactive CLI** — menus, confirmations, and a figlet banner
 - **Settings menu** — set your API keys, cache directory, and default report format without editing files (persisted to `settings.json`)
 - **Filesystem cache** — 24 h TTL, keyed per platform and repository, atomic writes, strict validation; reuse is always opt-in via a prompt
@@ -114,9 +114,9 @@ python main.py
 1. Choose **Analyze a GitHub repository** or **Analyze a GitLab repository**
 2. Enter the **owner** and **name** — for GitHub e.g. `torvalds` and `linux`; for GitLab the full namespace path, e.g. `gitlab-org` and `gitlab` or `group/subgroup` and `project` — input is whitespace-stripped
 3. If a fresh, complete cache entry exists (≤ 24 h old) you're asked whether to reuse it — `y` skips all API fetches, `n` refetches and refreshes the cache
-4. Pick a report format: type `text`, `json`, or `html`. Pressing Enter uses your saved default from Settings (`html` until changed). Asked on both the fresh-fetch and cache-hit paths
+4. Pick a report format: type `text`, `json`, `markdown`, or `html`. Pressing Enter uses your saved default from Settings (`html` until changed). Asked on both the fresh-fetch and cache-hit paths
 5. Watch the per-endpoint fetch progress, then read the terminal summary
-6. The report is saved to the current directory as `{platform}_{owner}_{repo}_report.{txt|json|html}` — e.g. `github_torvalds_linux_report.html` or `gitlab_group_subgroup_project_report.html` — so reports from different platforms can never overwrite each other
+6. The report is saved to the current directory as `{platform}_{owner}_{repo}_report.{txt|json|md|html}` — e.g. `github_torvalds_linux_report.html` or `gitlab_group_subgroup_project_report.html` — so reports from different platforms can never overwrite each other
 
 ### Example session
 
@@ -128,7 +128,7 @@ Enter the repository name: linux
 Found cached analysis for torvalds/linux from 5 hours ago.
 The cache is recent (within 24h) and contains a complete analysis.
 Use cached data? (y = use cache, n = fetch fresh) [y/n]: n
-Report format (text, json, html) [html]: html
+Report format (text, json, markdown, html) [html]: html
 
 Fetching data from GitHub...
 Fetching repository metadata for torvalds/linux...
@@ -148,7 +148,7 @@ A cache hit (`y`) skips the fetch but still asks for the format:
 
 ```text
 Using cached data for torvalds/linux (5 hours ago) — skipping GitHub fetch.
-Report format (text, json, html) [html]:
+Report format (text, json, markdown, html) [html]:
 
 Summary
   Health score: 92.5
@@ -168,6 +168,7 @@ Truncated endpoints: commits, issues
 |--------|------|----------|
 | Text | `{platform}_{owner}_{repo}_report.txt` | Reading in the terminal |
 | JSON | `{platform}_{owner}_{repo}_report.json` | Piping into scripts and dashboards |
+| Markdown | `{platform}_{owner}_{repo}_report.md` | Readable docs and diffs |
 | HTML | `{platform}_{owner}_{repo}_report.html` | Browsing and sharing — one self-contained interactive page |
 
 Save failures (e.g. the file is locked by another program) are reported without crashing the app.
@@ -235,7 +236,7 @@ RepoLens/
 ├── provider.py           # Platform-aware REST client (GitHub + GitLab): retries, rate limits, pagination, normalization
 ├── analyzer.py           # Pure payload transforms (API JSON → analysis dicts; filters PRs from issues)
 ├── scoring.py            # Activity / Community / Maintainability scores, health average, letter grades
-├── report.py             # Text / JSON / HTML report generators + save + summary printing
+├── report.py             # Text / JSON / Markdown / HTML report generators + save + summary printing
 ├── cache.py              # Filesystem cache (24 h TTL, versioned, atomic writes, per-platform keys)
 ├── settings.py           # settings.json load/save/apply (API keys, cache directory, default report format)
 ├── tests/                # unittest suite (fully mocked — no network needed)

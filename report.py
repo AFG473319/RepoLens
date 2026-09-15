@@ -9,7 +9,7 @@ import provider
 # Canonical list of supported report formats. Kept here so report generation,
 # the settings/validation layer, the interactive prompt, and the main-loop
 # dispatch all read it from this single source of truth.
-SUPPORTED_REPORT_FORMATS = ("text", "json", "html")
+SUPPORTED_REPORT_FORMATS = ("text", "json", "html", "markdown")
 
 
 def _platform_noun(platform: str) -> str:
@@ -834,8 +834,131 @@ def _generate_json_report(
     return generate_json_report(analysis, scores, platform=platform)
 
 
+def generate_markdown_report(
+    owner: str,
+    repo_name: str,
+    analysis: dict,
+    scores: dict,
+    platform: str = "github",
+) -> str:
+    """Generate a Markdown report mirroring the plain-text sections.
+
+    Uses bullet lists (not tables) so repo-sourced ``|`` characters render
+    harmlessly; nullable fields go through ``_display``/``_format_int``.
+    Every interpolated value is collapsed to a single line (``CR``/``LF``
+    become spaces) so a multi-line description cannot inject headings,
+    lists, or quotes into the document. The ``approximate``/``language_error``
+    notes are emitted conditionally.
+
+    Args:
+        owner: Repository owner or namespace shown in the title.
+        repo_name: Repository name shown in the title.
+        analysis: Dictionary containing analyzed metrics.
+        scores: Dictionary containing calculated scores.
+        platform: Platform the data was fetched from ('github' or 'gitlab').
+
+    Returns:
+        Formatted Markdown report as a string.
+    """
+    repo = analysis.get("repo") or {}
+    commits = analysis.get("commits") or {}
+    contributors = analysis.get("contributors") or {}
+    languages = analysis.get("languages") or {}
+    issues = analysis.get("issues") or {}
+
+    def _one_line(value: str) -> str:
+        """Collapse line breaks so a value stays a single list item."""
+        return value.replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
+
+    def _label(value, fallback: str) -> str:
+        if isinstance(value, str):
+            cleaned = _one_line(value).strip()
+            if cleaned:
+                return cleaned
+        return fallback
+
+    def _md(value, fallback: str) -> str:
+        """Display helper with Markdown single-line guarantee."""
+        return _one_line(_display(value, fallback))
+
+    owner_label = _label(owner, "Unknown")
+    repo_label = _label(repo_name, "Unknown")
+
+    lines = [
+        f"# RepoLens Report — {owner_label}/{repo_label}",
+        "",
+        f"- **Source:** {_platform_noun(platform)}",
+        "",
+        "## Repository Info",
+        "",
+        f"- **Name:** {_md(repo.get('name'), 'Unknown')}",
+        f"- **Description:** {_md(repo.get('description'), 'No description')}",
+        f"- **Stars:** {_format_int(repo.get('stars'))}",
+        f"- **Forks:** {_format_int(repo.get('forks'))}",
+        f"- **Language:** {_md(repo.get('language'), 'Unknown')}",
+        "",
+        "## Commits",
+        "",
+        f"- **Total commits:** {_format_int(commits.get('total_commits'))}",
+        f"- **Unique contributors:** {_format_int(commits.get('unique_contributors'))}",
+        f"- **Latest commit date:** {_md(commits.get('latest_commit_date'), 'N/A')}",
+        "",
+        "## Contributors",
+        "",
+        f"- **Total contributors:** {_format_int(contributors.get('total_contributors'))}",
+        f"- **Top contributor:** {_md(contributors.get('top_contributor'), 'N/A')}",
+        f"- **Most contributions:** {_format_int(contributors.get('most_contributions'))}",
+        "",
+        "## Languages",
+        "",
+        f"- **Primary language:** {_md(languages.get('primary_language'), 'Unknown')}",
+        f"- **Language count:** {_format_int(languages.get('language_count'))}",
+        "",
+        "## Issues",
+        "",
+        f"- **Total issues:** {_format_int(issues.get('total_issues'))}",
+        f"- **Open issues:** {_format_int(issues.get('open_issues'))}",
+        f"- **Closed issues:** {_format_int(issues.get('closed_issues'))}",
+        "",
+        "## Scores",
+        "",
+        f"- **Health score:** {_md(scores.get('health_score'), 'N/A')}",
+        f"- **Activity score:** {_md(scores.get('activity_score'), 'N/A')}",
+        f"- **Community score:** {_md(scores.get('community_score'), 'N/A')}",
+        f"- **Maintainability score:** {_md(scores.get('maintainability_score'), 'N/A')}",
+        f"- **Grade:** {_md(scores.get('grade'), 'N/A')}",
+    ]
+
+    notes = []
+    if analysis.get("approximate", False):
+        limit = provider.MAX_PAGES * provider.PER_PAGE
+        noun = _platform_noun(platform)
+        notes.append(
+            f"Note: This report is approximated because one or more {noun}"
+            f" endpoints returned more than {limit} results, so counts are"
+            " lower bounds."
+        )
+        truncated = ", ".join(
+            _one_line(str(endpoint))
+            for endpoint in analysis.get("truncated_endpoints", [])
+        )
+        if truncated:
+            notes.append(f"Truncated endpoints: {truncated}")
+    if analysis.get("language_error", False):
+        notes.append(
+            "Note: Language data could not be fetched, so language metrics"
+            " are missing from this report."
+        )
+    if notes:
+        lines += ["", "## Notes", ""]
+        lines += [f"- {note}" for note in notes]
+
+    return "\n".join(lines) + "\n"
+
+
 REPORT_FORMAT_GENERATORS = {
     "text": (_generate_text_report, ".txt"),
     "json": (_generate_json_report, ".json"),
     "html": (generate_html_report, ".html"),
+    "markdown": (generate_markdown_report, ".md"),
 }

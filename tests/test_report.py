@@ -9,6 +9,7 @@ from report import (
     generate_text_report,
     generate_json_report,
     generate_html_report,
+    generate_markdown_report,
     save_report,
     print_summary,
     REPORT_FORMAT_GENERATORS,
@@ -448,6 +449,178 @@ class TestGenerateJsonReport(unittest.TestCase):
                 "language_error": False,
             },
         )
+
+
+class TestGenerateMarkdownReport(unittest.TestCase):
+    def _analysis(self):
+        return {
+            "repo": {"name": "flask", "description": "A micro framework", "stars": 69500, "forks": 13200, "language": "Python"},
+            "commits": {"total_commits": 8500, "unique_contributors": 412, "latest_commit_date": "2026-08-27"},
+            "contributors": {"total_contributors": 843, "top_contributor": "mitsuhiko", "most_contributions": 1204},
+            "languages": {"primary_language": "Python", "language_count": 7},
+            "issues": {"total_issues": 1000, "open_issues": 213, "closed_issues": 787},
+        }
+
+    def _scores(self):
+        return {
+            "health_score": 92.5,
+            "activity_score": 95.0,
+            "community_score": 96.7,
+            "maintainability_score": 85.9,
+            "grade": "A",
+        }
+
+    def test_title_carries_owner_repo_and_source(self):
+        result = generate_markdown_report("pallets", "flask", self._analysis(), self._scores())
+
+        self.assertIn("# RepoLens Report — pallets/flask", result)
+        self.assertIn("- **Source:** GitHub", result)
+
+    def test_gitlab_source_noun(self):
+        result = generate_markdown_report("g", "p", self._analysis(), self._scores(), platform="gitlab")
+
+        self.assertIn("- **Source:** GitLab", result)
+
+    def test_section_headings_present(self):
+        result = generate_markdown_report("pallets", "flask", self._analysis(), self._scores())
+
+        for heading in ("## Repository Info", "## Commits", "## Contributors", "## Languages", "## Issues", "## Scores"):
+            self.assertIn(heading, result)
+
+    def test_complete_values_rendered(self):
+        result = generate_markdown_report("pallets", "flask", self._analysis(), self._scores())
+
+        for snippet in ("69,500", "13,200", "8,500", "mitsuhiko", "1,204", "2026-08-27", "92.5", "95.0", "96.7", "85.9", "Grade:** A"):
+            self.assertIn(snippet, result)
+
+    def test_blank_owner_and_repo_fall_back_to_unknown(self):
+        for owner, repo in (("", ""), ("   ", "\t "), (None, None), (123, ["x"])):
+            result = generate_markdown_report(owner, repo, {}, {})
+
+            self.assertIn("# RepoLens Report — Unknown/Unknown", result)
+
+    def test_owner_and_repo_are_stripped(self):
+        result = generate_markdown_report("  pallets  ", "  flask  ", {}, {})
+
+        self.assertIn("# RepoLens Report — pallets/flask", result)
+
+    def test_missing_keys_render_placeholders_without_none_leak(self):
+        result = generate_markdown_report("o", "r", {}, {})
+
+        for snippet in ("Unknown", "No description", "N/A"):
+            self.assertIn(snippet, result)
+        self.assertNotIn("None", result)
+
+    def test_explicit_none_renders_placeholders(self):
+        analysis = {
+            "repo": {"name": None, "description": None, "stars": None, "forks": None, "language": None},
+            "commits": {"total_commits": 0, "unique_contributors": 0, "latest_commit_date": None},
+            "contributors": {"total_contributors": 0, "top_contributor": None, "most_contributions": 0},
+            "languages": {"primary_language": None, "language_count": 0},
+            "issues": {"total_issues": 0, "open_issues": 0, "closed_issues": 0},
+        }
+        result = generate_markdown_report("o", "r", analysis, {})
+
+        self.assertIn("No description", result)
+        self.assertIn("N/A", result)
+        self.assertIn("Unknown", result)
+        self.assertNotIn("None", result)
+
+    def test_inline_markdown_chars_render_literally(self):
+        # Bullet lists (not tables) mean these need no escaping: they must
+        # survive verbatim without creating new blocks.
+        analysis = self._analysis()
+        analysis["repo"]["description"] = "a | pipe *star* `code` [link](http://x) # tag > quote - dash"
+        result = generate_markdown_report("o", "r", analysis, self._scores())
+
+        self.assertIn("a | pipe *star* `code` [link](http://x) # tag > quote - dash", result)
+
+    def test_multiline_description_cannot_inject_blocks(self):
+        analysis = self._analysis()
+        analysis["repo"]["description"] = "line one\n# injected heading\n- injected list\n> injected quote"
+        result = generate_markdown_report("o", "r", analysis, self._scores())
+
+        self.assertNotIn("\n# injected heading", result)
+        self.assertNotIn("\n- injected list", result)
+        self.assertNotIn("\n> injected quote", result)
+        self.assertIn("line one # injected heading - injected list > injected quote", result)
+        # Section structure stays intact: exactly the expected headings.
+        self.assertEqual(result.count("## "), 6)
+
+    def test_crlf_and_cr_collapsed(self):
+        analysis = self._analysis()
+        analysis["repo"]["description"] = "a\r\nb\rc"
+        result = generate_markdown_report("o", "r", analysis, self._scores())
+
+        self.assertIn("- **Description:** a b c", result)
+        self.assertNotIn("\r", result)
+
+    def test_multiline_owner_cannot_break_title(self):
+        result = generate_markdown_report("evil\n# heading", "repo", {}, {})
+
+        self.assertNotIn("\n# heading", result)
+        self.assertIn("# RepoLens Report — evil # heading/repo", result)
+
+    def test_whitespace_only_description_falls_back(self):
+        analysis = self._analysis()
+        analysis["repo"]["description"] = "   "
+        result = generate_markdown_report("o", "r", analysis, self._scores())
+
+        self.assertIn("- **Description:** No description", result)
+
+    def test_approximate_note_when_truncated(self):
+        analysis = self._analysis()
+        analysis["approximate"] = True
+        analysis["truncated_endpoints"] = ["commits", "issues"]
+        result = generate_markdown_report("o", "r", analysis, self._scores())
+
+        self.assertIn("## Notes", result)
+        self.assertIn("approximated", result)
+        self.assertIn(f"more than {provider.MAX_PAGES * provider.PER_PAGE} results", result)
+        self.assertIn("Truncated endpoints: commits, issues", result)
+        self.assertIn("one or more GitHub endpoints", result)
+
+    def test_approximate_note_names_gitlab(self):
+        analysis = self._analysis()
+        analysis["approximate"] = True
+        analysis["truncated_endpoints"] = ["issues"]
+        result = generate_markdown_report("o", "r", analysis, self._scores(), platform="gitlab")
+
+        self.assertIn("one or more GitLab endpoints", result)
+
+    def test_no_notes_section_when_exact_and_languages_ok(self):
+        analysis = self._analysis()
+        analysis["approximate"] = False
+        analysis["truncated_endpoints"] = []
+        result = generate_markdown_report("o", "r", analysis, self._scores())
+
+        self.assertNotIn("## Notes", result)
+        self.assertNotIn("approximated", result)
+
+    def test_language_error_note(self):
+        analysis = self._analysis()
+        analysis["language_error"] = True
+        result = generate_markdown_report("o", "r", analysis, self._scores())
+
+        self.assertIn("## Notes", result)
+        self.assertIn("Language data could not be fetched", result)
+
+    def test_unicode_survives(self):
+        analysis = self._analysis()
+        analysis["repo"]["description"] = "Résumé — 中文说明 🎉"
+        result = generate_markdown_report("o", "プロジェクト-ünïcodé", analysis, self._scores())
+
+        self.assertIn("プロジェクト-ünïcodé", result)
+        self.assertIn("Résumé — 中文说明", result)
+
+    def test_registry_entry_uses_md_extension_and_uniform_signature(self):
+        self.assertIn("markdown", SUPPORTED_REPORT_FORMATS)
+        generator, extension = REPORT_FORMAT_GENERATORS["markdown"]
+        self.assertEqual(extension, ".md")
+        result = generator("o", "r", self._analysis(), self._scores(), platform="github")
+
+        self.assertIsInstance(result, str)
+        self.assertIn("# RepoLens Report — o/r", result)
 
 
 class TestSaveReport(unittest.TestCase):
