@@ -2,7 +2,7 @@ import unittest
 import json
 import os
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import patch, call, MagicMock
 
 import provider
@@ -458,6 +458,13 @@ class TestGenerateJsonReport(unittest.TestCase):
                 "language_error": False,
             },
         )
+
+    def test_generated_at_is_utc_iso8601(self):
+        parsed = json.loads(generate_json_report({}, {}))
+
+        generated_at = datetime.fromisoformat(parsed["generated_at"])
+
+        self.assertEqual(generated_at.tzinfo, timezone.utc)
 
 
 class TestGenerateMarkdownReport(unittest.TestCase):

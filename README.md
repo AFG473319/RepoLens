@@ -173,6 +173,8 @@ Truncated endpoints: commits, issues
 
 Save failures (e.g. the file is locked by another program) are reported without crashing the app.
 
+JSON reports carry `analysis`, `scores`, `platform`, `approximate`, `truncated_endpoints`, `language_error`, and `generated_at` — an ISO-8601 timestamp in UTC recording when the report was rendered.
+
 ---
 
 ## Metrics & Scoring
