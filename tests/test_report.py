@@ -15,6 +15,7 @@ from report import (
     print_summary,
     REPORT_FORMAT_GENERATORS,
     SUPPORTED_REPORT_FORMATS,
+    _days_since_last_commit,
 )
 
 
@@ -143,6 +144,49 @@ class TestGenerateTextReport(unittest.TestCase):
         self.assertIn("  Top contributor: N/A", result)
         self.assertIn("  Primary language: Unknown", result)
         self.assertIn("  Grade: N/A", result)
+
+
+class TestDaysSinceLastCommit(unittest.TestCase):
+    def test_helper_uses_fixed_now(self):
+        now = datetime(2024, 6, 25, tzinfo=timezone.utc)
+
+        result = _days_since_last_commit(
+            {"latest_commit_date": "2024-06-15"}, now=now
+        )
+
+        self.assertEqual(result, "10")
+
+    def test_helper_missing_or_bad_date_returns_na(self):
+        for commits in (
+            {},
+            {"latest_commit_date": None},
+            {"latest_commit_date": "not-a-date"},
+        ):
+            with self.subTest(commits=commits):
+                self.assertEqual(_days_since_last_commit(commits), "N/A")
+
+    def test_text_report_shows_line_via_scoring(self):
+        analysis = {"commits": {"latest_commit_date": "2024-06-15"}}
+
+        with patch("report.scoring._days_since", return_value=42) as mock_days:
+            result = generate_text_report(analysis, {})
+
+        self.assertIn("  Days since last commit: 42", result)
+        self.assertEqual(mock_days.call_args.args[0], "2024-06-15")
+
+    def test_markdown_report_shows_line(self):
+        analysis = {"commits": {"latest_commit_date": "2024-06-15"}}
+
+        with patch("report.scoring._days_since", return_value=42):
+            result = generate_markdown_report("o", "r", analysis, {})
+
+        self.assertIn("- **Days since last commit:** 42", result)
+
+    def test_missing_date_shows_na_in_text_report(self):
+        result = generate_text_report({}, {})
+
+        self.assertIn("  Days since last commit: N/A", result)
+        self.assertNotIn("None", result)
 
 
 class TestGenerateHtmlReport(unittest.TestCase):

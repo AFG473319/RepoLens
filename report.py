@@ -4,6 +4,7 @@ from html import escape
 from string import Template
 
 import provider
+import scoring
 
 
 # Canonical list of supported report formats. Kept here so report generation,
@@ -63,7 +64,8 @@ def generate_text_report(analysis: dict, scores: dict, platform: str = "github")
         + "Commits\n"
         + f"  Total commits: {commits.get('total_commits', 0)}\n"
         + f"  Unique contributors: {commits.get('unique_contributors', 0)}\n"
-        + f"  Latest commit date: {commits.get('latest_commit_date', 'N/A')}\n\n"
+        + f"  Latest commit date: {commits.get('latest_commit_date', 'N/A')}\n"
+        + f"  Days since last commit: {_days_since_last_commit(commits)}\n\n"
         + "Contributors\n"
         + f"  Total contributors: {contributors.get('total_contributors', 0)}\n"
         + f"  Top contributor: {contributors.get('top_contributor', 'N/A')}\n"
@@ -223,6 +225,21 @@ def _format_int(value, fallback: str = "0") -> str:
         return f"{int(value):,}"
     except (TypeError, ValueError):
         return fallback
+
+
+def _days_since_last_commit(commits: dict, now: datetime.datetime | None = None) -> str:
+    """Render whole days since the latest commit, or "N/A" when unknown.
+
+    Reuses ``scoring._days_since`` for all date parsing so the report and
+    the activity score always agree on how stale a repository is.
+    """
+    date = commits.get("latest_commit_date")
+    if not date:
+        return "N/A"
+    days = scoring._days_since(date, now=now)
+    if days is None:
+        return "N/A"
+    return str(days)
 
 
 def _score_ruler(label: str, score: float) -> str:
@@ -903,6 +920,7 @@ def generate_markdown_report(
         f"- **Total commits:** {_format_int(commits.get('total_commits'))}",
         f"- **Unique contributors:** {_format_int(commits.get('unique_contributors'))}",
         f"- **Latest commit date:** {_md(commits.get('latest_commit_date'), 'N/A')}",
+        f"- **Days since last commit:** {_days_since_last_commit(commits)}",
         "",
         "## Contributors",
         "",
