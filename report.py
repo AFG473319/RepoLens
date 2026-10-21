@@ -107,6 +107,7 @@ def generate_json_report(analysis: dict, scores: dict, platform: str = "github")
         "approximate": bool(analysis.get("approximate", False)),
         "truncated_endpoints": list(analysis.get("truncated_endpoints", [])),
         "language_error": bool(analysis.get("language_error", False)),
+        "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
     return json.dumps(data, indent=4)
 
@@ -752,8 +753,8 @@ def generate_html_report(
         ("Languages used", _format_int(languages.get("language_count"))),
         ("Total commits", _format_int(commits.get("total_commits"))),
         ("Unique commit authors", _format_int(commits.get("unique_contributors"))),
+        ("Recent contributors", _format_int(contributors.get("total_contributors"))),
         ("Latest commit", _display(commits.get("latest_commit_date"), "N/A")),
-        ("Total contributors", _format_int(contributors.get("total_contributors"))),
         ("Top contributor", f"{top_contributor} "
          f"({_format_int(contributors.get('most_contributions'))} contributions)"),
         ("Issues", f"{_format_int(issues.get('total_issues'))} total · "

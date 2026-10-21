@@ -189,6 +189,36 @@ class TestAnalyzeCommits(unittest.TestCase):
 
         self.assertEqual(result["unique_contributors"], 1)
 
+    def test_mixed_offsets_picks_true_latest(self):
+        commits = [
+            {"commit": {"author": {"name": "A", "date": "2024-05-01T10:00:00+03:30"}}},
+            {"commit": {"author": {"name": "B", "date": "2024-05-01T08:00:00+00:00"}}},
+        ]
+
+        result = analyze_commits(commits)
+
+        self.assertEqual(result["latest_commit_date"], "2024-05-01T08:00:00+00:00")
+
+    def test_z_suffix_and_offset_compared_correctly(self):
+        commits = [
+            {"commit": {"author": {"name": "A", "date": "2024-05-01T07:00:00Z"}}},
+            {"commit": {"author": {"name": "B", "date": "2024-05-01T10:00:00+03:30"}}},
+        ]
+
+        result = analyze_commits(commits)
+
+        self.assertEqual(result["latest_commit_date"], "2024-05-01T07:00:00Z")
+
+    def test_unparseable_date_ignored(self):
+        commits = [
+            {"commit": {"author": {"name": "A", "date": "not-a-date"}}},
+            {"commit": {"author": {"name": "B", "date": "2024-01-03"}}},
+        ]
+
+        result = analyze_commits(commits)
+
+        self.assertEqual(result["latest_commit_date"], "2024-01-03")
+
 
 class TestAnalyzeContributors(unittest.TestCase):
     def test_analyze_contributors_finds_top(self):

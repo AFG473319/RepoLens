@@ -2,6 +2,7 @@ import unittest
 import json
 import os
 import tempfile
+from datetime import datetime
 from unittest.mock import patch, call, MagicMock
 
 import provider
@@ -423,6 +424,9 @@ class TestGenerateJsonReport(unittest.TestCase):
 
         parsed = json.loads(generate_json_report(analysis, scores))
 
+        self.assertIn("generated_at", parsed)
+        datetime.fromisoformat(parsed.pop("generated_at"))
+
         self.assertEqual(
             parsed,
             {
@@ -438,8 +442,13 @@ class TestGenerateJsonReport(unittest.TestCase):
     def test_empty_inputs_still_valid(self):
         result = generate_json_report({}, {})
 
+        parsed = json.loads(result)
+
+        self.assertIn("generated_at", parsed)
+        datetime.fromisoformat(parsed.pop("generated_at"))
+
         self.assertEqual(
-            json.loads(result),
+            parsed,
             {
                 "analysis": {},
                 "scores": {},
