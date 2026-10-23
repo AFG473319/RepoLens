@@ -399,6 +399,34 @@ class TestGenerateHtmlReport(unittest.TestCase):
         self.assertIn("69,500", result)
         self.assertIn("8,500", result)
 
+    def test_shows_days_since_last_commit(self):
+        with patch("report.scoring._days_since", return_value=42):
+            result = generate_html_report("pallets", "flask", self._analysis(), self._scores())
+
+        self.assertIn('<span class="k">Days since last commit</span>', result)
+        self.assertIn('<span class="v">42</span>', result)
+        self._assert_no_none(result)
+
+    def test_days_since_last_commit_appears_between_latest_commit_and_top_contributor(self):
+        with patch("report.scoring._days_since", return_value=42):
+            result = generate_html_report("pallets", "flask", self._analysis(), self._scores())
+
+        days_idx = result.index('<span class="k">Days since last commit</span>')
+        latest_idx = result.index('<span class="k">Latest commit</span>')
+        contributor_idx = result.index('<span class="k">Top contributor</span>')
+        self.assertGreater(days_idx, latest_idx)
+        self.assertLess(days_idx, contributor_idx)
+
+    def test_days_since_last_commit_shows_na_when_missing(self):
+        analysis = self._analysis()
+        analysis["commits"] = {}
+
+        result = generate_html_report("pallets", "flask", analysis, self._scores())
+
+        self.assertIn('<span class="k">Days since last commit</span>', result)
+        self.assertIn("N/A", result)
+        self.assertNotIn("None", result.replace("<!-- None", ""))
+
 
 class TestGenerateJsonReport(unittest.TestCase):
     def test_returns_valid_json(self):

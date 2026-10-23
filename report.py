@@ -772,6 +772,7 @@ def generate_html_report(
         ("Unique commit authors", _format_int(commits.get("unique_contributors"))),
         ("Recent contributors", _format_int(contributors.get("total_contributors"))),
         ("Latest commit", _display(commits.get("latest_commit_date"), "N/A")),
+        ("Days since last commit", _days_since_last_commit(commits)),
         ("Top contributor", f"{top_contributor} "
          f"({_format_int(contributors.get('most_contributions'))} contributions)"),
         ("Issues", f"{_format_int(issues.get('total_issues'))} total · "
