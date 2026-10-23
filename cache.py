@@ -4,6 +4,8 @@ import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+from dates import parse_iso_datetime
+
 CACHE_TTL_SECONDS = 24 * 3600  # 24 hours - fresh enough for active repos, prompt lets user override
 CACHE_VERSION = 1
 # Cache files are named <owner>_<repo>_repolens_cache.json so that cache
@@ -165,27 +167,6 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _parse_iso(date_str: str) -> datetime | None:
-    """Parse a cache timestamp into a timezone-aware datetime.
-
-    Args:
-        date_str: ISO-8601 timestamp stored in a cache payload.
-
-    Returns:
-        The parsed datetime, or ``None`` when the value is invalid.
-    """
-    if not isinstance(date_str, str):
-        return None
-    try:
-        # cache stores ISO with timezone
-        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
-    except (ValueError, AttributeError):
-        return None
-
-
 def build_cache_payload(
     owner: str,
     repo: str,
@@ -239,7 +220,7 @@ def is_cache_valid(data: dict) -> bool:
         return False
     if not isinstance(data.get("platform", "github"), str) or not data.get("platform", "github"):
         return False
-    fetched_at = _parse_iso(data.get("fetched_at", "")) if isinstance(data.get("fetched_at"), str) else None
+    fetched_at = parse_iso_datetime(data.get("fetched_at", "")) if isinstance(data.get("fetched_at"), str) else None
     if fetched_at is None:
         return False
     analysis = data.get("analysis")
@@ -276,7 +257,7 @@ def is_cache_fresh(data: dict, ttl_seconds: int = CACHE_TTL_SECONDS, now: dateti
         ``True`` when the cache is fresh or its timestamp is in the future;
         otherwise ``False``.
     """
-    fetched_at = _parse_iso(data.get("fetched_at", "")) if isinstance(data.get("fetched_at"), str) else None
+    fetched_at = parse_iso_datetime(data.get("fetched_at", "")) if isinstance(data.get("fetched_at"), str) else None
     if fetched_at is None:
         return False
     current = now if now is not None else _now()
@@ -301,7 +282,7 @@ def cache_age_string(data: dict, now: datetime | None = None) -> str:
         A human-readable age string, or ``"unknown age"`` for an invalid
         timestamp.
     """
-    fetched_at = _parse_iso(data.get("fetched_at", "")) if isinstance(data.get("fetched_at"), str) else None
+    fetched_at = parse_iso_datetime(data.get("fetched_at", "")) if isinstance(data.get("fetched_at"), str) else None
     if fetched_at is None:
         return "unknown age"
     current = now if now is not None else _now()

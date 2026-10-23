@@ -1,22 +1,4 @@
-from datetime import datetime, timezone
-
-
-def _parse_commit_date(value: str) -> datetime | None:
-    """Parse an ISO-8601 commit date into an aware UTC datetime.
-
-    Accepts a trailing "Z" (as emitted by the GitHub API) and treats
-    naive values (e.g. "2024-01-03") as UTC so mixed inputs stay
-    comparable. Returns None when the value cannot be parsed.
-    """
-    try:
-        if value.endswith("Z"):
-            value = value[:-1] + "+00:00"
-        parsed = datetime.fromisoformat(value)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed
+from dates import parse_iso_datetime
 
 
 def analyze_repo(repo_data: dict) -> dict:
@@ -68,7 +50,7 @@ def analyze_commits(commits: list[dict]) -> dict:
         date = author_info.get("date")
         if not date:
             continue
-        parsed = _parse_commit_date(date)
+        parsed = parse_iso_datetime(date)
         if parsed is None:
             continue
         if latest_parsed is None or parsed > latest_parsed:

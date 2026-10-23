@@ -1,6 +1,8 @@
 import math
 from datetime import datetime, timezone
 
+from dates import parse_iso_datetime
+
 RECENCY_BONUS_DAYS = 90
 RECENCY_BONUS_POINTS = 10.0
 
@@ -30,29 +32,6 @@ def calculate_activity_score(commits_data: dict) -> float:
     return round(min(score, 100.0), 2)
 
 
-def _parse_commit_date(date_str: str) -> datetime | None:
-    """Parse an ISO-8601 timestamp into a timezone-aware datetime.
-
-    Accepts ``Z`` suffix and naive timestamps (assumed UTC). Returns
-    ``None`` if the value is not a string or is unparseable.
-
-    Args:
-        date_str: ISO-8601 date string to parse.
-
-    Returns:
-        Aware datetime in UTC, or None on failure.
-    """
-    if not isinstance(date_str, str):
-        return None
-    try:
-        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
-    except (ValueError, AttributeError):
-        return None
-
-
 def _days_since(date_str: str, now: datetime | None = None) -> int | None:
     """Return whole days elapsed since ``date_str``.
 
@@ -68,7 +47,7 @@ def _days_since(date_str: str, now: datetime | None = None) -> int | None:
         Non-negative integer days (future dates clamped to 0), or None
         if ``date_str`` is unparseable.
     """
-    dt = _parse_commit_date(date_str)
+    dt = parse_iso_datetime(date_str)
     if dt is None:
         return None
     current = now if now is not None else datetime.now(timezone.utc)
